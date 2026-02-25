@@ -51,10 +51,12 @@ def get_combination_type(cards):
     if n == 4:
         if all(c.rank == cards[0].rank for c in cards):
             return "FOUR_OF_A_KIND"
-        return None
     if n >= 3:
         ranks = sorted([c.rank for c in cards])
         if len(set(ranks)) == n and all(ranks[i] == ranks[i-1] + 1 for i in range(1, n)):
+            # Luật Sâm: 2 (rank 15) không được nằm trong sảnh
+            if 15 in ranks:
+                return None
             return "STRAIGHT"
     return None
 

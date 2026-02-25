@@ -19,6 +19,12 @@ def validate_move(player_hand, move, last_move=None):
             return False, f"Lá {card} không có trong tay"
         hand_copy.remove(card)
 
+    # Luật Thối 2: Không được về nhất bằng lá 2 (đơn, đôi, tam)
+    # Nếu đánh hết bài (len(move) == len(player_hand)) và bài đánh ra toàn là 2
+    if len(move) == len(player_hand):
+        if all(c.rank == 15 for c in move) and len(move) < 4:
+            return False, "Không được về nhất bằng lá 2"
+
     # Kiểm tra tổ hợp
     typ = get_combination_type(move)
     if typ is None:
@@ -61,11 +67,12 @@ def generate_all_valid_moves(hand):
             moves.append(cards[:4])  # đơn giản lấy 4 lá đầu
 
     # Sảnh
-    unique_ranks = sorted(set(c.rank for c in hand))
+    # Luật Sâm: Sảnh không được chứa 2 (rank 15)
+    unique_ranks = sorted(set(c.rank for c in hand if c.rank != 15))
     # Tìm tất cả các đoạn liên tiếp độ dài >=3
     for length in range(3, len(unique_ranks) + 1):
         for i in range(len(unique_ranks) - length + 1):
-            segment = unique_ranks[i:i+length]
+            segment = unique_ranks[i:i+length]# kiểm tra đoạn này có phải là sảnh không
             if all(segment[j] == segment[j-1] + 1 for j in range(1, length)):
                 # Có sảnh với các rank này
                 # Lấy tất cả lá của mỗi rank
