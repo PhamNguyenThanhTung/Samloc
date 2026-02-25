@@ -18,6 +18,7 @@ class SamLocGUI:
         self.engine = None
         self.selected_cards = []
         self.card_buttons = []
+        self.bot_timer = None
         self.setup_widgets()
 
     def setup_widgets(self):
@@ -99,20 +100,36 @@ class SamLocGUI:
             text = "(chưa chọn lá nào)"
         self.selected_label.config(text=text)
 
-    def toggle_card(self, card, button):
+    def refresh_card_buttons(self):
+        """Cập nhật màu sắc các button để hiển thị lá đang chọn"""
+        for btn in self.card_buttons:
+            # Lấy text của button để so sánh
+            btn_text = btn.cget("text")
+            # Kiểm tra nếu lá này có trong selected_cards
+            is_selected = any(str(c) == btn_text for c in self.selected_cards)
+            if is_selected:
+                btn.config(bg='lightgreen', relief='sunken')
+            else:
+                btn.config(bg='SystemButtonFace', relief='raised')
+
+    def toggle_card(self, card):
         if card in self.selected_cards:
             self.selected_cards.remove(card)
-            button.config(bg='SystemButtonFace', relief='raised')
         else:
             self.selected_cards.append(card)
-            button.config(bg='lightgreen', relief='sunken')
         self.update_selected_display()
+        self.refresh_card_buttons()
 
     def update_display(self):
         state = self.engine.state
         current_player = self.engine.get_current_player()
         if current_player is None:
             return
+
+        # Hủy timer cũ nếu có để tránh bot đánh 2 lần hoặc đánh khi game đã kết thúc
+        if self.bot_timer:
+            self.root.after_cancel(self.bot_timer)
+            self.bot_timer = None
 
         # Thông tin tổng quan
         info = f"Vòng {state.round} – Lượt: {current_player.name}\n"
@@ -141,19 +158,22 @@ class SamLocGUI:
             for card in hand_sorted:
                 btn = tk.Button(self.hand_inner, text=str(card), font=('Courier', 16),
                                 width=4, height=2,
-                                command=lambda c=card: self.toggle_card(c, btn))
+                                command=lambda c=card: self.toggle_card(c))
                 btn.pack(side=tk.LEFT, padx=2, pady=5)
                 self.card_buttons.append(btn)
-                # Nếu lá này đang được chọn (sau khi cập nhật), highlight lại
-                if card in self.selected_cards:
-                    btn.config(bg='lightgreen', relief='sunken')
+            # Cập nhật màu sắc các button dựa vào selected_cards
+            self.refresh_card_buttons()
         else:
             # Lượt bot
             label = tk.Label(self.hand_inner, text="(Đến lượt bot...)", font=('Arial', 14))
             label.pack()
-            self.root.after(1000, self.bot_move)
+            # Chỉ lên lịch cho bot nếu game đang diễn ra
+            if state.phase == "PLAYING":
+                self.bot_timer = self.root.after(1000, self.bot_move)
 
     def play_selected(self):
+        if self.engine.state.phase != "PLAYING":
+            return
         if not self.selected_cards:
             messagebox.showwarning("Chưa chọn bài", "Bạn chưa chọn lá bài nào để đánh.")
             return

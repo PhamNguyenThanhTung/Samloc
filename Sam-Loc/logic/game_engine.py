@@ -27,6 +27,10 @@ class GameEngine:
         self.players = []  # thêm thuộc tính này
 
     def setup_game(self, player_names=None, initial_money=None):
+        # Lưu lại người thắng ván trước (nếu có)
+        prev_winner = self.state.winner
+        self.state = GameState()
+
         if player_names:
             self.player_names = player_names
         if initial_money:
@@ -40,6 +44,7 @@ class GameEngine:
         if self.players:
             for i, hand in enumerate(self.player_hands):
                 self.players[i].receive_cards(hand)
+                self.players[i].reset_round()
 
         for i, hand in enumerate(self.player_hands):
             win, typ = check_instant_win(hand)
@@ -49,13 +54,17 @@ class GameEngine:
                 self.state.phase = "FINISHED"
                 return
 
-        self._determine_first_player()
+        self._determine_first_player(prev_winner)
         self.state.phase = "PLAYING"
 
-    def _determine_first_player(self):
+    def _determine_first_player(self, prev_winner=None):
+        if prev_winner is not None:
+            self.state.current_player = prev_winner
+            return
+
         for i, hand in enumerate(self.player_hands):
             for card in hand:
-                if str(card) == "3♠":
+                if card.rank == 3 and card.suit == 'spade':
                     self.state.current_player = i
                     return
         self.state.current_player = 0
