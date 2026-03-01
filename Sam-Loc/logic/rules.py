@@ -38,21 +38,28 @@ def get_combination_type(cards):
     if not cards:
         return "PASS"
     n = len(cards)
+    ranks = sorted([c.rank for c in cards])
+    is_same_rank = len(set(ranks)) == 1
+
     if n == 1:
         return "SINGLE"
     if n == 2:
-        if cards[0].rank == cards[1].rank:
+        if is_same_rank:
             return "PAIR"
         return None
     if n == 3:
-        if cards[0].rank == cards[1].rank == cards[2].rank:
+        if is_same_rank:
             return "TRIPLE"
+        # Kiểm tra sảnh 3 lá
+        if all(ranks[i] == ranks[i-1] + 1 for i in range(1, n)) and 15 not in ranks:
+            return "STRAIGHT"
         return None
     if n == 4:
-        if all(c.rank == cards[0].rank for c in cards):
+        if is_same_rank:
             return "FOUR_OF_A_KIND"
-    if n >= 3:
-        ranks = sorted([c.rank for c in cards])
+    
+    # Kiểm tra sảnh n >= 4
+    if n >= 4:
         if len(set(ranks)) == n and all(ranks[i] == ranks[i-1] + 1 for i in range(1, n)):
             # Luật Sâm: 2 (rank 15) không được nằm trong sảnh
             if 15 in ranks:
