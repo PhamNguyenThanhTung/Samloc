@@ -31,9 +31,8 @@ class GameEngine:
         self.player_money = [100000] * num_players
         self.players = [] 
 
-    def setup_game(self, player_names=None, initial_money=None):
+    def setup_game(self, player_names=None, initial_money=None, prev_winner_idx=None, force_smallest=False):
         """Khởi tạo ván và bắt đầu giai đoạn hỏi Báo Sâm."""
-        prev_winner = self.state.winner
         self.state = GameState()
         if player_names: self.player_names = player_names
         if initial_money: self.player_money = initial_money
@@ -56,20 +55,35 @@ class GameEngine:
                 self.state.last_scores = self._update_scores() 
                 return
 
-        self._determine_first_player(prev_winner)
+        self._determine_first_player(prev_winner_idx if not force_smallest else None)
         self.state.phase = "ANNOUNCING"
-        self.state.announcement_index = 0 # Bắt đầu hỏi từ người chơi đầu tiên
+        self.state.announcement_index = 0 
 
-    def _determine_first_player(self, prev_winner=None):
-        if prev_winner is not None:
-            self.state.current_player = prev_winner
+    def _determine_first_player(self, prev_winner_idx=None):
+        if prev_winner_idx is not None and prev_winner_idx < self.num_players:
+            self.state.current_player = prev_winner_idx
             return
+        
+        # Tìm người cầm lá nhỏ nhất
+        suit_order = {'spade': 0, 'club': 1, 'diamond': 2, 'heart': 3}
+        best_p = 0
+        min_card = None
+        
         for i, hand in enumerate(self.player_hands):
             for card in hand:
-                if card.rank == 3 and card.suit == 'spade':
-                    self.state.current_player = i
-                    return
-        self.state.current_player = 0
+                if min_card is None:
+                    min_card = card
+                    best_p = i
+                else:
+                    # So sánh Rank trước, sau đó đến Chất
+                    if card.rank < min_card.rank:
+                        min_card = card
+                        best_p = i
+                    elif card.rank == min_card.rank:
+                        if suit_order[card.suit] < suit_order[min_card.suit]:
+                            min_card = card
+                            best_p = i
+        self.state.current_player = best_p
 
     def handle_announcement(self, player_idx, is_reporting_sam):
         """Xử lý quyết định báo sâm."""

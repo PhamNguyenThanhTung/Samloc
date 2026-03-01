@@ -43,9 +43,11 @@ class SamLocGUI:
         self.engine = None
         self.slots = [None] * 4
         self.session_slots = [None] * 4
+        self.last_roster = [None] * 4 
+        self.prev_winner_idx = None 
+        
         self.human_selected = False
         self.player_money_storage = [100000] * 4
-        self.player_money_storage[0] = self.user_money
         
         self.selected_cards = []
         self.move_history = []
@@ -123,31 +125,28 @@ class SamLocGUI:
                 self.engine.handle_announcement(idx, False)
 
     def on_click(self, pos):
-        # 1. Nếu menu chọn role đang mở, ưu tiên xử lý click vào menu
         if self.menu_active != -1:
             self.handle_menu_click(pos)
             return
 
-        # 2. Click vào các Slot (Thêm/Xóa người chơi bất cứ lúc nào)
         for i, coord in enumerate(self.slot_coords):
             rect = pygame.Rect(coord[0]-75, coord[1]-40, 150, 80)
             if rect.collidepoint(pos):
                 phase = self.engine.state.phase if self.engine else "LOBBY"
                 if self.slots[i]:
-                    # Chỉ được xóa nếu không phải người đang trực tiếp tham gia ván bài
                     is_in_session = self.engine and self.session_slots[i] and phase != "FINISHED"
                     if not is_in_session:
                         if self.slots[i] == 'HUMAN': self.human_selected = False
                         self.slots[i] = None
+                        self.player_money_storage[i] = 100000 
                     else:
-                        # Nếu click trúng Slot 0 (Bạn) khi đang chơi, bỏ qua để click bài ở dưới
                         if i == 0 and phase == "PLAYING": continue
                         return
                 else:
+                    if self.player_money_storage[i] < 20000: return
                     self.menu_active = i
                 return
 
-        # 3. Nút THOÁT
         if pygame.Rect(SCREEN_WIDTH - 120, 20, 100, 40).collidepoint(pos):
             self.running = False; return
 
@@ -155,31 +154,26 @@ class SamLocGUI:
         
         if phase == "LOBBY":
             if pygame.Rect(SCREEN_WIDTH//2-100, SCREEN_HEIGHT//2-40, 200, 80).collidepoint(pos):
-                if sum(1 for s in self.slots if s) >= 2: self.start_game_session()
+                self.start_game_session()
                 return
 
         elif phase == "PLAYING":
             if pygame.Rect(20, 20, 140, 45).collidepoint(pos): self.show_bots = not self.show_bots
-            
             h_idx = self.get_human_index()
             if h_idx != -1 and self.engine.state.current_player == h_idx:
                 if pygame.Rect(950, 700, 110, 50).collidepoint(pos): self.play_selected_cards()
                 if self.engine.state.last_move is not None:
                     if pygame.Rect(1070, 700, 110, 50).collidepoint(pos): self.execute_move(None)
-                
-                # Logic click bài: Duyệt ngược để ưu tiên lá nằm trên cùng
                 hand = sorted(self.engine.player_hands[h_idx], key=lambda c: (c.rank, c.suit))
                 start_x = SCREEN_WIDTH//2 - (len(hand)*40 + 80 - 40)//2
-
-                # Duyệt từ phải sang trái (lá trên cùng trước)
-                for i in range(len(hand) - 1, -1, -1):
+                for i in range(len(hand)-1, -1, -1):
                     card = hand[i]
                     y_off = 630 if card in self.selected_cards else 660
                     rect = pygame.Rect(start_x + i*40, y_off, 80, 115)
                     if rect.collidepoint(pos):
                         if card in self.selected_cards: self.selected_cards.remove(card)
                         else: self.selected_cards.append(card)
-                        return # Thoát ngay sau khi tìm thấy lá trên cùng
+                        return
 
         elif phase == "ANNOUNCING":
             h_idx = self.get_human_index()
@@ -192,18 +186,13 @@ class SamLocGUI:
                 self.start_game_session()
 
     def get_menu_info(self, idx):
-        """Tính toán vị trí và tùy chọn cho Menu chọn Role."""
         x, y = self.slot_coords[idx]
         options = []
         if not self.human_selected: options.append(('Người chơi', 'HUMAN'))
         options += [('Bot Dễ', 'BOTV0'), ('Bot Khó', 'BOTV1'), ('Cực khó', 'BOTV2')]
-        
         menu_h = len(options)*35 + 10
         menu_y = y + 45
-        # Nếu ở hàng dưới (Slot 0), menu hiện lên trên
-        if menu_y + menu_h > SCREEN_HEIGHT:
-            menu_y = y - 45 - menu_h
-            
+        if menu_y + menu_h > SCREEN_HEIGHT: menu_y = y - 45 - menu_h
         rects = []
         for i, (label, role_key) in enumerate(options):
             rects.append((pygame.Rect(x-75, menu_y + i*35, 150, 30), label, role_key))
@@ -214,14 +203,26 @@ class SamLocGUI:
         for rect, label, role_key in rects:
             if rect.collidepoint(pos):
                 self.slots[self.menu_active] = role_key
-                if role_key == 'HUMAN': self.human_selected = True
+                if role_key == 'HUMAN':
+                    self.human_selected = True
+                    self.player_money_storage[self.menu_active] = self.user_money
+                else:
+                    self.player_money_storage[self.menu_active] = 100000
                 self.menu_active = -1
                 return
         self.menu_active = -1
 
     def start_game_session(self):
         active_count = sum(1 for s in self.slots if s)
+        if active_count < 2:
+            print("Không đủ người chơi! Reset về Lobby.")
+            self.engine = None
+            return
+
+        force_smallest = (self.slots != self.last_roster)
+        if force_smallest: self.prev_winner_idx = None
         self.session_slots = self.slots[:]
+        self.last_roster = self.slots[:]
         self.engine = GameEngine(num_players=active_count)
         players, money = [], []
         for i, role in enumerate(self.session_slots):
@@ -233,7 +234,7 @@ class SamLocGUI:
             elif role == 'BOTV2': players.append(BotV2("Bot V2", m))
             money.append(m)
         self.engine.players = players
-        self.engine.setup_game([p.name for p in players], money)
+        self.engine.setup_game([p.name for p in players], money, prev_winner_idx=self.prev_winner_idx, force_smallest=force_smallest)
         self.move_history, self.selected_cards = [], []
 
     def execute_move(self, move):
@@ -242,6 +243,7 @@ class SamLocGUI:
         self.engine.play_move(move)
         self.selected_cards = []
         if self.engine.state.phase == "FINISHED":
+            self.prev_winner_idx = self.engine.state.winner
             self.sync_money()
             for i, role in enumerate(self.session_slots):
                 if role == 'HUMAN':
@@ -258,11 +260,21 @@ class SamLocGUI:
 
     def sync_money(self):
         e_idx = 0
+        any_kicked = False
         for i in range(4):
             if self.session_slots[i]:
                 if self.engine and e_idx < len(self.engine.player_money):
-                    self.player_money_storage[i] = self.engine.player_money[e_idx]
+                    new_money = self.engine.player_money[e_idx]
+                    self.player_money_storage[i] = new_money
+                    if new_money < 20000:
+                        if self.slots[i] == 'HUMAN':
+                            self.human_selected = False
+                            self.user_money = 100000 
+                        self.slots[i] = None 
+                        self.player_money_storage[i] = 100000
+                        any_kicked = True
                 e_idx += 1
+        if any_kicked: self.last_roster = [None] * 4
 
     def get_human_index(self):
         if not self.engine: return -1
@@ -275,14 +287,11 @@ class SamLocGUI:
     def draw(self):
         self.screen.blit(self.bg_img, (0, 0))
         phase = self.engine.state.phase if self.engine else "LOBBY"
-
         for i, coord in enumerate(self.slot_coords):
             self.draw_slot(i, coord)
-
         if phase == "LOBBY":
             if sum(1 for s in self.slots if s) >= 2:
                 self.draw_button("BẮT ĐẦU", SCREEN_WIDTH//2-100, SCREEN_HEIGHT//2-40, 200, 80, BLUE_SOFT)
-
         elif phase == "PLAYING" or phase == "ANNOUNCING":
             btn_txt = "ẨN BÀI BOT" if self.show_bots else "XEM BÀI BOT"
             self.draw_button(btn_txt, 20, 20, 140, 45, (150, 50, 150))
@@ -291,14 +300,9 @@ class SamLocGUI:
                 h_idx = self.get_human_index()
                 if h_idx != -1 and self.engine.state.announcement_index == h_idx:
                     self.draw_sam_panel()
-
         elif phase == "FINISHED":
             self.draw_end_result()
-
-        # LUÔN VẼ MENU NẾU ĐANG MỞ (Và vẽ cuối cùng để hiện trên cùng)
-        if self.menu_active != -1:
-            self.draw_role_menu(self.menu_active)
-
+        if self.menu_active != -1: self.draw_role_menu(self.menu_active)
         self.draw_button("THOÁT", SCREEN_WIDTH - 120, 20, 100, 40, RED)
         pygame.display.flip()
 
@@ -315,11 +319,9 @@ class SamLocGUI:
                 use_engine = True
                 if self.engine.state.phase == "PLAYING" and self.engine.state.current_player == e_idx:
                     is_turn = True
-
         color = GOLD if is_turn else WHITE
         pygame.draw.rect(self.screen, GRAY_DARK, (x-75, y-40, 150, 80), border_radius=10)
         pygame.draw.rect(self.screen, color, (x-75, y-40, 150, 80), 3, border_radius=10)
-
         if not role:
             txt = self.font_big.render("+", True, WHITE)
             self.screen.blit(txt, (x - txt.get_width()//2, y - txt.get_height()//2))
@@ -351,7 +353,6 @@ class SamLocGUI:
             if not self.session_slots[i]: continue
             x, y = self.slot_coords[i]
             hand = sorted(self.engine.player_hands[e_idx], key=lambda c: (c.rank, c.suit))
-            
             if self.session_slots[i] == 'HUMAN':
                 start_x = SCREEN_WIDTH//2 - (len(hand)*40 + 80 - 40)//2
                 for j, card in enumerate(hand):
@@ -363,12 +364,12 @@ class SamLocGUI:
                     self.draw_button("BỎ LƯỢT", 1070, 700, 110, 50, pass_color)
             else:
                 if self.show_bots:
-                    if i == 0 or i == 2: # Bot dưới hoặc trên: Ngang
+                    if i == 0 or i == 2:
                         start_x = SCREEN_WIDTH//2 - (len(hand)*30 + 60 - 30)//2
                         target_y = y - 140 if i == 0 else y + 45
                         for j, card in enumerate(hand):
                             self.screen.blit(self.card_images[(card.rank, card.suit, 'small')], (start_x + j*30, target_y))
-                    else: # Bot trái/phải: Dọc
+                    else:
                         start_y = SCREEN_HEIGHT//2 - (len(hand)*25 + 85 - 25)//2
                         bx = x + 85 if i == 3 else x - 145
                         for j, card in enumerate(hand):
@@ -383,7 +384,6 @@ class SamLocGUI:
                     txt = self.font_small.render(str(len(hand)), True, WHITE)
                     self.screen.blit(txt, (bx + 60 - txt.get_width()//2, by + 10 - txt.get_height()//2))
             e_idx += 1
-
         if phase == "PLAYING":
             actual_moves = [m for m in self.move_history if m[1] is not None][-3:]
             for k, (name, cards) in enumerate(actual_moves):
