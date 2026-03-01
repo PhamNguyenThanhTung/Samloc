@@ -113,6 +113,15 @@ class GameEngine:
             if self.players:
                 self.players[player_idx].play_cards(move)
             
+            # KIỂM TRA CHẶN SÂM
+            if self.state.sam_announcer != -1 and player_idx != self.state.sam_announcer:
+                # Người báo Sâm đã bị chặn -> Kết thúc ván ngay lập tức
+                self.state.phase = "FINISHED"
+                self.state.winner = player_idx # Người chặn thắng
+                # Tính điểm đền sâm (có thể truyền tham số đặc biệt vào _update_scores nếu cần)
+                self.state.last_scores = self._update_scores() 
+                return True, f"{self.player_names[self.state.sam_announcer]} bị CHẶN SÂM!"
+
             self.state.last_move = move
             self.state.last_player = player_idx
             if len(hand) == 0:

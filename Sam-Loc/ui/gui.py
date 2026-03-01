@@ -1,8 +1,7 @@
-import tkinter as tk
-from tkinter import messagebox, simpledialog
+import pygame
 import sys
 import os
-from PIL import Image, ImageTk
+import math
 
 # Thêm đường dẫn gốc để import logic và player
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,345 +14,413 @@ from player.bot_v2 import BotV2
 from logic.move_validator import validate_move
 from logic.save_manager import save_game, load_game
 
+# --- CẤU HÌNH ---
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+FPS = 60
+
+# Màu sắc
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GOLD = (255, 215, 0)
+RED = (200, 40, 40)
+GREEN_DARK = (20, 70, 20)
+GRAY_DARK = (40, 40, 40)
+BLUE_SOFT = (50, 100, 200)
+
 class SamLocGUI:
     def __init__(self):
-        """Khởi tạo giao diện chính và tải dữ liệu lưu trữ."""
-        self.root = tk.Tk()
-        self.root.title("Sâm Lốc Pro - Lobby Chỉnh Tùy")
-        self.root.geometry("1100x850")
-        self.root.resizable(False, False)
+        pygame.init()
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Sâm Lốc Pro - Pygame Edition")
+        self.clock = pygame.time.Clock()
+        self.running = True
 
         save_data = load_game()
         self.user_name = save_data.get("player_name", "Bạn")
         self.user_money = save_data.get("money", 100000)
 
         self.engine = None
-        self.card_images = {}
-        self.bg_photo = None
-        self.canvas = None
-        self.show_bots = False
-
-        self.slots = [None] * 4 # Vai trò của 4 slot: HUMAN, BOTV0, BOTV1, BOTV2
+        self.slots = [None] * 4
+        self.session_slots = [None] * 4
         self.human_selected = False
-        self.player_money_storage = [100000] * 4 
+        self.player_money_storage = [100000] * 4
         self.player_money_storage[0] = self.user_money
-
+        
         self.selected_cards = []
         self.move_history = []
+        self.show_bots = False 
+        
+        self.menu_active = -1
+        self.font_main = pygame.font.SysFont("Segoe UI", 22, bold=True)
+        self.font_small = pygame.font.SysFont("Segoe UI", 18, bold=True)
+        self.font_big = pygame.font.SysFont("Segoe UI", 36, bold=True)
 
-        self.card_width, self.card_height = 70, 105
-        self.card_spacing = 35 
-        self.played_card_width, self.played_card_height = 65, 95
-
+        self.card_images = {}
         self.load_assets()
-        self.setup_ui()
-        self.update_display()
+        
+        self.slot_coords = [
+            (SCREEN_WIDTH // 2, 650),
+            (1050, SCREEN_HEIGHT // 2),
+            (SCREEN_WIDTH // 2, 120),
+            (150, SCREEN_HEIGHT // 2)
+        ]
 
     def load_assets(self):
-        """Tải toàn bộ hình ảnh cần thiết."""
         bg_path = os.path.join('img', 'table', 'table_background.png')
         if os.path.exists(bg_path):
-            bg_img = Image.open(bg_path).resize((1100, 850), Image.Resampling.LANCZOS)
-            self.bg_photo = ImageTk.PhotoImage(bg_img)
+            self.bg_img = pygame.image.load(bg_path).convert()
+            self.bg_img = pygame.transform.scale(self.bg_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        else:
+            self.bg_img = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            self.bg_img.fill(GREEN_DARK)
 
         suit_map = {'spade': 'spades', 'heart': 'hearts', 'diamond': 'diamonds', 'club': 'clubs'}
         rank_map = {3:'3', 4:'4', 5:'5', 6:'6', 7:'7', 8:'8', 9:'9', 10:'10', 11:'jack', 12:'queen', 13:'king', 14:'ace', 15:'2'}
         base_path = os.path.join('img', 'PNG-cards-1.3')
         
-        back_path = os.path.join(base_path, 'back_card.png')
-        if os.path.exists(back_path):
-            self.card_images['back'] = ImageTk.PhotoImage(Image.open(back_path).resize((60, 90), Image.Resampling.LANCZOS))
-
         for rank, rank_name in rank_map.items():
             for suit, suit_name in suit_map.items():
                 filename = f"{rank_name}_of_{suit_name}.png"
                 path = os.path.join(base_path, filename)
                 if os.path.exists(path):
-                    img = Image.open(path)
-                    self.card_images[(rank, suit)] = ImageTk.PhotoImage(img.resize((self.card_width, self.card_height), Image.Resampling.LANCZOS))
-                    self.card_images[(rank, suit, 'played')] = ImageTk.PhotoImage(img.resize((self.played_card_width, self.played_card_height), Image.Resampling.LANCZOS))
-
-    def setup_ui(self):
-        """Khởi tạo Canvas và các nút chức năng."""
-        self.canvas = tk.Canvas(self.root, width=1100, height=850, highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True)
-
-        self.cheat_btn = tk.Button(self.root, text="Xem bài Bot", bg="#9C27B0", fg="white", font=("Arial", 9, "bold"), width=12, command=self.toggle_show_bots, bd=0)
-        self.quit_btn = tk.Button(self.root, text="THOÁT", bg="#f44336", fg="white", font=("Arial", 9, "bold"), width=8, command=self.root.quit, bd=0)
-        self.profile_btn = tk.Button(self.root, text="Đổi Tên", bg="#FF9800", fg="white", font=("Arial", 9, "bold"), width=10, command=self.change_name, bd=0)
-        self.profile_btn.place(x=20, y=60)
-
-        self.play_btn = tk.Button(self.root, text="ĐÁNH BÀI", bg="#4CAF50", fg="white", font=("Arial", 12, "bold"), width=12, height=2, command=self.play_selected, bd=0)
-        self.pass_btn = tk.Button(self.root, text="BỎ LƯỢT", bg="#FF9800", fg="white", font=("Arial", 12, "bold"), width=12, height=2, command=self.pass_turn, bd=0)
-        self.start_btn = tk.Button(self.root, text="BẮT ĐẦU", bg="#2196F3", fg="white", font=("Arial", 16, "bold"), width=12, height=2, command=self.start_game_session, bd=0)
-
-        # UI BÁO SÂM
-        self.sam_panel = tk.Frame(self.root, bg="#111", padx=20, pady=20)
-        tk.Label(self.sam_panel, text="BẠN CÓ MUỐN BÁO SÂM?", fg="yellow", bg="#111", font=("Arial", 14, "bold")).pack(pady=10)
-        btn_box = tk.Frame(self.sam_panel, bg="#111")
-        btn_box.pack()
-        tk.Button(btn_box, text="BÁO SÂM", bg="#f44336", fg="white", font=("Arial", 12, "bold"), width=10, command=lambda: self.sam_decision(True)).pack(side=tk.LEFT, padx=10)
-        tk.Button(btn_box, text="KHÔNG", bg="#757575", fg="white", font=("Arial", 12, "bold"), width=10, command=lambda: self.sam_decision(False)).pack(side=tk.LEFT, padx=10)
-
-    def select_role(self, slot_idx):
-        """Mở cửa sổ chọn vai trò cho từng Slot (Bạn / Bot V0 / Bot V1 / Bot V2)."""
-        top = tk.Toplevel(self.root)
-        top.title(f"Slot {slot_idx+1}")
-        top.geometry("250x220")
-        top.transient(self.root)
-        top.grab_set()
-
-        def set_role(role):
-            if role == 'HUMAN': self.human_selected = True
-            self.slots[slot_idx] = role
-            top.destroy()
-            self.update_display()
-
-        if not self.human_selected:
-            tk.Button(top, text=f"Người chơi ({self.user_name})", bg="#1976D2", fg="white", pady=5, command=lambda: set_role('HUMAN')).pack(fill="x", padx=20, pady=10)
+                    img = pygame.image.load(path).convert_alpha()
+                    self.card_images[(rank, suit)] = pygame.transform.scale(img, (80, 115))
+                    self.card_images[(rank, suit, 'small')] = pygame.transform.scale(img, (60, 85))
         
-        tk.Button(top, text="Bot V0 (Dễ)", bg="#388E3C", fg="white", pady=5, command=lambda: set_role('BOTV0')).pack(fill="x", padx=20, pady=5)
-        tk.Button(top, text="Bot V1 (Khó)", bg="#E64A19", fg="white", pady=5, command=lambda: set_role('BOTV1')).pack(fill="x", padx=20, pady=5)
-        tk.Button(top, text="Bot V2 (Cực khó)", bg="#C62828", fg="white", pady=5, command=lambda: set_role('BOTV2')).pack(fill="x", padx=20, pady=5)
+        back_path = os.path.join(base_path, 'back_card.png')
+        if os.path.exists(back_path):
+            self.card_images['back'] = pygame.transform.scale(pygame.image.load(back_path).convert_alpha(), (70, 100))
 
-    def remove_role(self, slot_idx):
-        """Xóa vai trò khỏi slot để dấu (+) hiện lại."""
-        if self.slots[slot_idx] == 'HUMAN': self.human_selected = False
-        self.slots[slot_idx] = None
-        self.update_display()
+    def run(self):
+        while self.running:
+            self.handle_events()
+            self.update_logic()
+            self.draw()
+            self.clock.tick(FPS)
+        pygame.quit()
 
-    def change_name(self):
-        """Đổi tên người chơi và lưu vào file."""
-        new = simpledialog.askstring("Đổi tên", "Nhập tên mới:", initialvalue=self.user_name)
-        if new:
-            self.user_name = new
-            save_game(self.user_name, self.user_money)
-            self.update_display()
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self.on_click(event.pos)
+
+    def update_logic(self):
+        if self.engine and self.engine.state.phase == "PLAYING":
+            cur_p = self.engine.get_current_player()
+            if cur_p and not cur_p.is_human:
+                if not hasattr(self, 'bot_timer'): self.bot_timer = pygame.time.get_ticks()
+                if pygame.time.get_ticks() - self.bot_timer > 1000:
+                    move = cur_p.choose_move(self.engine.get_valid_moves(), self.engine.can_pass())
+                    self.execute_move(move)
+                    delattr(self, 'bot_timer')
+        
+        if self.engine and self.engine.state.phase == "ANNOUNCING":
+            idx = self.engine.state.announcement_index
+            if idx < len(self.engine.players) and not self.engine.players[idx].is_human:
+                self.engine.handle_announcement(idx, False)
+
+    def on_click(self, pos):
+        # 1. Nếu menu chọn role đang mở, ưu tiên xử lý click vào menu
+        if self.menu_active != -1:
+            self.handle_menu_click(pos)
+            return
+
+        # 2. Click vào các Slot (Thêm/Xóa người chơi bất cứ lúc nào)
+        for i, coord in enumerate(self.slot_coords):
+            rect = pygame.Rect(coord[0]-75, coord[1]-40, 150, 80)
+            if rect.collidepoint(pos):
+                phase = self.engine.state.phase if self.engine else "LOBBY"
+                if self.slots[i]:
+                    # Chỉ được xóa nếu không phải người đang trực tiếp tham gia ván bài
+                    is_in_session = self.engine and self.session_slots[i] and phase != "FINISHED"
+                    if not is_in_session:
+                        if self.slots[i] == 'HUMAN': self.human_selected = False
+                        self.slots[i] = None
+                    else:
+                        # Nếu click trúng Slot 0 (Bạn) khi đang chơi, bỏ qua để click bài ở dưới
+                        if i == 0 and phase == "PLAYING": continue
+                        return
+                else:
+                    self.menu_active = i
+                return
+
+        # 3. Nút THOÁT
+        if pygame.Rect(SCREEN_WIDTH - 120, 20, 100, 40).collidepoint(pos):
+            self.running = False; return
+
+        phase = self.engine.state.phase if self.engine else "LOBBY"
+        
+        if phase == "LOBBY":
+            if pygame.Rect(SCREEN_WIDTH//2-100, SCREEN_HEIGHT//2-40, 200, 80).collidepoint(pos):
+                if sum(1 for s in self.slots if s) >= 2: self.start_game_session()
+                return
+
+        elif phase == "PLAYING":
+            if pygame.Rect(20, 20, 140, 45).collidepoint(pos): self.show_bots = not self.show_bots
+            
+            h_idx = self.get_human_index()
+            if h_idx != -1 and self.engine.state.current_player == h_idx:
+                if pygame.Rect(950, 700, 110, 50).collidepoint(pos): self.play_selected_cards()
+                if self.engine.state.last_move is not None:
+                    if pygame.Rect(1070, 700, 110, 50).collidepoint(pos): self.execute_move(None)
+                
+                # Logic click bài: Duyệt ngược để ưu tiên lá nằm trên cùng
+                hand = sorted(self.engine.player_hands[h_idx], key=lambda c: (c.rank, c.suit))
+                start_x = SCREEN_WIDTH//2 - (len(hand)*40 + 80 - 40)//2
+
+                # Duyệt từ phải sang trái (lá trên cùng trước)
+                for i in range(len(hand) - 1, -1, -1):
+                    card = hand[i]
+                    y_off = 630 if card in self.selected_cards else 660
+                    rect = pygame.Rect(start_x + i*40, y_off, 80, 115)
+                    if rect.collidepoint(pos):
+                        if card in self.selected_cards: self.selected_cards.remove(card)
+                        else: self.selected_cards.append(card)
+                        return # Thoát ngay sau khi tìm thấy lá trên cùng
+
+        elif phase == "ANNOUNCING":
+            h_idx = self.get_human_index()
+            if h_idx != -1 and self.engine.state.announcement_index == h_idx:
+                if pygame.Rect(SCREEN_WIDTH//2-110, 400, 100, 50).collidepoint(pos): self.engine.handle_announcement(h_idx, True)
+                if pygame.Rect(SCREEN_WIDTH//2+10, 400, 100, 50).collidepoint(pos): self.engine.handle_announcement(h_idx, False)
+
+        elif phase == "FINISHED":
+            if pygame.Rect(SCREEN_WIDTH//2-100, SCREEN_HEIGHT//2+100, 200, 60).collidepoint(pos):
+                self.start_game_session()
+
+    def get_menu_info(self, idx):
+        """Tính toán vị trí và tùy chọn cho Menu chọn Role."""
+        x, y = self.slot_coords[idx]
+        options = []
+        if not self.human_selected: options.append(('Người chơi', 'HUMAN'))
+        options += [('Bot Dễ', 'BOTV0'), ('Bot Khó', 'BOTV1'), ('Cực khó', 'BOTV2')]
+        
+        menu_h = len(options)*35 + 10
+        menu_y = y + 45
+        # Nếu ở hàng dưới (Slot 0), menu hiện lên trên
+        if menu_y + menu_h > SCREEN_HEIGHT:
+            menu_y = y - 45 - menu_h
+            
+        rects = []
+        for i, (label, role_key) in enumerate(options):
+            rects.append((pygame.Rect(x-75, menu_y + i*35, 150, 30), label, role_key))
+        return rects, pygame.Rect(x-80, menu_y - 5, 160, menu_h)
+
+    def handle_menu_click(self, pos):
+        rects, _ = self.get_menu_info(self.menu_active)
+        for rect, label, role_key in rects:
+            if rect.collidepoint(pos):
+                self.slots[self.menu_active] = role_key
+                if role_key == 'HUMAN': self.human_selected = True
+                self.menu_active = -1
+                return
+        self.menu_active = -1
 
     def start_game_session(self):
-        """Khởi tạo GameEngine dựa trên các Slot đã chọn."""
         active_count = sum(1 for s in self.slots if s)
-        if active_count < 2:
-            messagebox.showwarning("Lỗi", "Cần ít nhất 2 người chơi để bắt đầu!"); return
-
+        self.session_slots = self.slots[:]
         self.engine = GameEngine(num_players=active_count)
         players, money = [], []
-        
-        for i, role in enumerate(self.slots):
-            if role == 'HUMAN':
-                players.append(HumanPlayer(self.user_name, self.player_money_storage[i]))
-                money.append(self.player_money_storage[i])
-            elif role == 'BOTV0':
-                players.append(BotV0(f"Bot V0", self.player_money_storage[i]))
-                money.append(self.player_money_storage[i])
-            elif role == 'BOTV1':
-                players.append(BotV1(f"Bot V1", self.player_money_storage[i]))
-                money.append(self.player_money_storage[i])
-            elif role == 'BOTV2':
-                players.append(BotV2(f"Bot V2", self.player_money_storage[i]))
-                money.append(self.player_money_storage[i])
-        
+        for i, role in enumerate(self.session_slots):
+            if not role: continue
+            m = self.player_money_storage[i]
+            if role == 'HUMAN': players.append(HumanPlayer(self.user_name, m))
+            elif role == 'BOTV0': players.append(BotV0("Bot V0", m))
+            elif role == 'BOTV1': players.append(BotV1("Bot V1", m))
+            elif role == 'BOTV2': players.append(BotV2("Bot V2", m))
+            money.append(m)
         self.engine.players = players
         self.engine.setup_game([p.name for p in players], money)
         self.move_history, self.selected_cards = [], []
-        self.update_display()
-
-    def sam_decision(self, decision):
-        """Xử lý nút bấm Báo Sâm."""
-        idx = self.engine.state.announcement_index
-        self.engine.handle_announcement(idx, decision)
-        if decision: messagebox.showinfo("Sâm!", f"{self.user_name} BÁO SÂM!")
-        self.check_next_announcement()
-
-    def check_next_announcement(self):
-        """Hỏi người tiếp theo hoặc vào trận đánh."""
-        if self.engine.state.phase == "ANNOUNCING":
-            idx = self.engine.state.announcement_index
-            cur_p = self.engine.players[idx]
-            if isinstance(cur_p, HumanPlayer):
-                self.sam_panel.place(x=400, y=350)
-            else:
-                self.engine.handle_announcement(idx, False)
-                self.check_next_announcement()
-        else:
-            self.sam_panel.place_forget()
-            self.update_display()
-
-    def update_display(self):
-        """Vẽ lại toàn bộ bàn chơi."""
-        self.canvas.delete("all")
-        if self.bg_photo: self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
-        
-        state = self.engine.state if self.engine else None
-        phase = state.phase if state else "LOBBY"
-
-        self.play_btn.place_forget(); self.pass_btn.place_forget()
-        self.start_btn.place_forget(); self.cheat_btn.place_forget()
-        self.sam_panel.place_forget()
-
-        if phase == "ANNOUNCING":
-            self.check_next_announcement()
-        elif phase == "PLAYING":
-            self.cheat_btn.place(x=20, y=20)
-            # Tìm index của Bạn trong engine
-            h_idx = -1
-            for i, p in enumerate(self.engine.players):
-                if p.name == self.user_name: h_idx = i; break
-            if state.current_player == h_idx:
-                self.play_btn.place(x=780, y=750); self.pass_btn.place(x=920, y=750)
-                self.pass_btn.config(state="disabled" if state.last_move is None else "normal")
-            if state.sam_announcer != -1:
-                name = self.engine.player_names[state.sam_announcer]
-                self.canvas.create_text(550, 50, text=f"★ {name} ĐANG BÁO SÂM ★", fill="red", font=("Arial", 20, "bold"))
-        else:
-            if sum(1 for s in self.slots if s) >= 2: self.start_btn.place(x=450, y=400)
-
-        # Vẽ Slots
-        coords = [(550, 650), (950, 380), (550, 100), (150, 380)]
-        for i in range(4):
-            x, y = coords[i]
-            if self.slots[i]:
-                e_idx = sum(1 for s in self.slots[:i] if s)
-                self.draw_slot(i, x, y, e_idx)
-            else:
-                self.draw_add_button(i, x, y)
-
-        if self.engine and phase == "PLAYING":
-            # Vẽ bài Bạn
-            h_idx = -1
-            for i, p in enumerate(self.engine.players):
-                if p.name == self.user_name: h_idx = i; break
-            if h_idx != -1:
-                hand = sorted(self.engine.player_hands[h_idx], key=lambda c: (c.rank, c.suit))
-                start_x = 550 - (len(hand)*self.card_spacing + self.card_width - self.card_spacing)/2
-                for j, card in enumerate(hand):
-                    y_pos = 710
-                    if card in self.selected_cards: y_pos -= 25
-                    cid = self.canvas.create_image(start_x + j*self.card_spacing, y_pos, image=self.card_images[(card.rank, card.suit)], anchor="nw", tags="card")
-                    if state.current_player == h_idx:
-                        self.canvas.tag_bind(cid, "<Button-1>", lambda e, c=card: self.toggle_card(c))
-
-            # Bài chồng
-            base_center_x, base_center_y = 550, 350
-            actual_moves = [m for m in self.move_history if m[1] is not None][-3:]
-            for k, (name, cards) in enumerate(actual_moves):
-                offset_y, offset_x = (k - 1) * 45, (k - 1) * 30
-                move_w = (len(cards) * 25 + self.played_card_width - 25)
-                sx, sy = base_center_x - move_w/2 + offset_x, base_center_y + offset_y
-                for j, card in enumerate(cards):
-                    self.canvas.create_image(sx + j*25, sy, image=self.card_images[(card.rank, card.suit, 'played')], anchor="nw", tags="history")
-
-            # Bot đánh
-            cur_p = self.engine.get_current_player()
-            if cur_p and not isinstance(cur_p, HumanPlayer):
-                self.root.after(800, self.bot_move)
-
-    def draw_slot(self, slot_idx, x, y, e_idx):
-        money = self.player_money_storage[slot_idx]
-        name = "Bot"
-        is_turn, hand_size = False, 0
-        if self.engine:
-            p = self.engine.players[e_idx]
-            name, money, hand_size = p.name, p.money, len(self.engine.player_hands[e_idx])
-            is_turn = (self.engine.state.current_player == e_idx and self.engine.state.phase == "PLAYING")
-        else:
-            role = self.slots[slot_idx]
-            name = self.user_name if role == 'HUMAN' else f"Bot {role[-2:]}"
-
-        color, bg_c = ("#FFD700" if is_turn else "white"), ("#111" if not is_turn else "#330")
-        tag = f"role_{slot_idx}"
-        self.canvas.create_rectangle(x-75, y-35, x+75, y+35, fill=bg_c, outline=color, width=2, tags=tag)
-        self.canvas.create_text(x, y-15, text=name, fill=color, font=("Arial", 11, "bold"), tags=tag)
-        self.canvas.create_text(x, y+22, text=f"{money:,}đ", fill="#00FF00", font=("Arial", 9, "bold"), tags=tag)
-        
-        if self.engine:
-            self.canvas.create_text(x, y+5, text=f"{hand_size} lá", fill="white", font=("Arial", 9), tags=tag)
-            if not isinstance(self.engine.players[e_idx], HumanPlayer):
-                if self.show_bots:
-                    hand = sorted(self.engine.player_hands[e_idx], key=lambda c: (c.rank, c.suit))
-                    sx = x - (len(hand)*20 + 40)/2
-                    for i, c in enumerate(hand): self.canvas.create_image(sx + i*20, y+40, image=self.card_images[(c.rank, c.suit, 'played')], anchor="nw")
-                else:
-                    bx, by = (x+90, y-30) if x < 300 else (x-150, y-30) if x > 800 else (x-30, y+45)
-                    self.canvas.create_image(bx, by, image=self.card_images['back'], anchor="nw")
-                    self.canvas.create_oval(bx+45, by-10, bx+75, by+20, fill="#D32F2F", outline="white")
-                    self.canvas.create_text(bx+60, by+5, text=str(hand_size), fill="white", font=("Arial", 9, "bold"))
-        else:
-            self.canvas.tag_bind(tag, "<Button-1>", lambda e: self.remove_role(slot_idx))
-
-        if is_turn:
-            arr = "▲" if y > 600 else "▼" if y < 200 else "◀" if x > 800 else "▶"
-            self.canvas.create_text(x, y-55 if y > 600 else y+55 if y < 200 else y, text=arr, fill="yellow", font=("Arial", 20))
-
-    def draw_add_button(self, slot_idx, x, y):
-        tag = f"add_{slot_idx}"
-        self.canvas.create_oval(x-30, y-30, x+30, y+30, fill="#2E7D32", outline="white", width=2, tags=tag)
-        self.canvas.create_text(x, y, text="+", fill="white", font=("Arial", 30, "bold"), tags=tag)
-        self.canvas.tag_bind(tag, "<Button-1>", lambda e: self.select_role(slot_idx))
-
-    def toggle_show_bots(self):
-        self.show_bots = not self.show_bots
-        self.cheat_btn.config(text="Ẩn bài Bot" if self.show_bots else "Xem bài Bot")
-        self.update_display()
-
-    def toggle_card(self, card):
-        if card in self.selected_cards: self.selected_cards.remove(card)
-        else: self.selected_cards.append(card)
-        self.update_display()
-
-    def play_selected(self):
-        cur = self.engine.get_current_player()
-        if not cur or not self.selected_cards: return
-        valid, msg = validate_move(cur.hand, self.selected_cards, self.engine.state.last_move)
-        if not valid: messagebox.showerror("Lỗi", msg); return
-        self.execute_move(self.selected_cards)
-
-    def pass_turn(self):
-        self.execute_move(None)
 
     def execute_move(self, move):
-        if self.engine.state.last_move is None: self.move_history = []
         p_name = self.engine.get_current_player().name
-        if move is not None: self.move_history.append((p_name, move))
-        res = self.engine.play_move(move)
-        if success_state(res):
-            if self.engine.state.phase == "FINISHED":
-                self.sync_money_to_storage()
-                self.user_money = self.player_money_storage[0]
-                save_game(self.user_name, self.user_money)
-                self.show_end_result()
-            self.selected_cards = []
-            self.update_display()
-        else:
-            if move is not None: self.move_history.pop()
-            messagebox.showerror("Lỗi", "Không hợp lệ")
+        if move: self.move_history.append((p_name, move))
+        self.engine.play_move(move)
+        self.selected_cards = []
+        if self.engine.state.phase == "FINISHED":
+            self.sync_money()
+            for i, role in enumerate(self.session_slots):
+                if role == 'HUMAN':
+                    self.user_money = self.player_money_storage[i]
+                    save_game(self.user_name, self.user_money)
+                    break
 
-    def sync_money_to_storage(self):
+    def play_selected_cards(self):
+        h_idx = self.get_human_index()
+        if h_idx == -1: return
+        cur = self.engine.players[h_idx]
+        valid, _ = validate_move(cur.hand, self.selected_cards, self.engine.state.last_move)
+        if valid: self.execute_move(self.selected_cards)
+
+    def sync_money(self):
         e_idx = 0
         for i in range(4):
-            if self.slots[i]:
-                self.player_money_storage[i] = self.engine.player_money[e_idx]
+            if self.session_slots[i]:
+                if self.engine and e_idx < len(self.engine.player_money):
+                    self.player_money_storage[i] = self.engine.player_money[e_idx]
                 e_idx += 1
 
-    def show_end_result(self):
+    def get_human_index(self):
+        if not self.engine: return -1
+        e_idx = 0
+        for i, role in enumerate(self.session_slots):
+            if role == 'HUMAN': return e_idx
+            if role: e_idx += 1
+        return -1
+
+    def draw(self):
+        self.screen.blit(self.bg_img, (0, 0))
+        phase = self.engine.state.phase if self.engine else "LOBBY"
+
+        for i, coord in enumerate(self.slot_coords):
+            self.draw_slot(i, coord)
+
+        if phase == "LOBBY":
+            if sum(1 for s in self.slots if s) >= 2:
+                self.draw_button("BẮT ĐẦU", SCREEN_WIDTH//2-100, SCREEN_HEIGHT//2-40, 200, 80, BLUE_SOFT)
+
+        elif phase == "PLAYING" or phase == "ANNOUNCING":
+            btn_txt = "ẨN BÀI BOT" if self.show_bots else "XEM BÀI BOT"
+            self.draw_button(btn_txt, 20, 20, 140, 45, (150, 50, 150))
+            self.draw_gameplay()
+            if phase == "ANNOUNCING":
+                h_idx = self.get_human_index()
+                if h_idx != -1 and self.engine.state.announcement_index == h_idx:
+                    self.draw_sam_panel()
+
+        elif phase == "FINISHED":
+            self.draw_end_result()
+
+        # LUÔN VẼ MENU NẾU ĐANG MỞ (Và vẽ cuối cùng để hiện trên cùng)
+        if self.menu_active != -1:
+            self.draw_role_menu(self.menu_active)
+
+        self.draw_button("THOÁT", SCREEN_WIDTH - 120, 20, 100, 40, RED)
+        pygame.display.flip()
+
+    def draw_slot(self, i, pos):
+        x, y = pos
+        role = self.slots[i]
+        is_turn = False
+        use_engine = False
+        if self.engine and self.session_slots[i]:
+            e_idx = 0
+            for j in range(i):
+                if self.session_slots[j]: e_idx += 1
+            if e_idx < len(self.engine.players):
+                use_engine = True
+                if self.engine.state.phase == "PLAYING" and self.engine.state.current_player == e_idx:
+                    is_turn = True
+
+        color = GOLD if is_turn else WHITE
+        pygame.draw.rect(self.screen, GRAY_DARK, (x-75, y-40, 150, 80), border_radius=10)
+        pygame.draw.rect(self.screen, color, (x-75, y-40, 150, 80), 3, border_radius=10)
+
+        if not role:
+            txt = self.font_big.render("+", True, WHITE)
+            self.screen.blit(txt, (x - txt.get_width()//2, y - txt.get_height()//2))
+        else:
+            name = self.user_name if role == 'HUMAN' else f"Bot {role[-2:]}"
+            money = self.player_money_storage[i]
+            is_pending = self.engine and not self.session_slots[i] and self.engine.state.phase != "FINISHED"
+            txt_n = self.font_main.render(name, True, color if not is_pending else (150, 150, 150))
+            txt_m = self.font_small.render(f"{money:,}đ", True, (100, 255, 100))
+            self.screen.blit(txt_n, (x - txt_n.get_width()//2, y - 25))
+            self.screen.blit(txt_m, (x - txt_m.get_width()//2, y + 5))
+            if is_pending:
+                txt_p = self.font_small.render("(Chờ ván sau)", True, (200, 200, 200))
+                self.screen.blit(txt_p, (x - txt_p.get_width()//2, y + 25))
+
+    def draw_role_menu(self, idx):
+        rects, bg_rect = self.get_menu_info(idx)
+        pygame.draw.rect(self.screen, (30, 30, 30), bg_rect, border_radius=5)
+        pygame.draw.rect(self.screen, WHITE, bg_rect, 1, border_radius=5)
+        for rect, label, role_key in rects:
+            pygame.draw.rect(self.screen, (60, 60, 60), rect, border_radius=3)
+            txt = self.font_small.render(label, True, WHITE)
+            self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
+
+    def draw_gameplay(self):
+        phase = self.engine.state.phase if self.engine else "LOBBY"
+        e_idx = 0
+        for i in range(4):
+            if not self.session_slots[i]: continue
+            x, y = self.slot_coords[i]
+            hand = sorted(self.engine.player_hands[e_idx], key=lambda c: (c.rank, c.suit))
+            
+            if self.session_slots[i] == 'HUMAN':
+                start_x = SCREEN_WIDTH//2 - (len(hand)*40 + 80 - 40)//2
+                for j, card in enumerate(hand):
+                    y_pos = 630 if card in self.selected_cards else 660
+                    self.screen.blit(self.card_images[(card.rank, card.suit)], (start_x + j*40, y_pos))
+                if phase == "PLAYING" and self.engine.state.current_player == e_idx:
+                    self.draw_button("ĐÁNH", 950, 700, 110, 50, (40, 160, 40))
+                    pass_color = (200, 100, 30) if self.engine.state.last_move else (100, 100, 100)
+                    self.draw_button("BỎ LƯỢT", 1070, 700, 110, 50, pass_color)
+            else:
+                if self.show_bots:
+                    if i == 0 or i == 2: # Bot dưới hoặc trên: Ngang
+                        start_x = SCREEN_WIDTH//2 - (len(hand)*30 + 60 - 30)//2
+                        target_y = y - 140 if i == 0 else y + 45
+                        for j, card in enumerate(hand):
+                            self.screen.blit(self.card_images[(card.rank, card.suit, 'small')], (start_x + j*30, target_y))
+                    else: # Bot trái/phải: Dọc
+                        start_y = SCREEN_HEIGHT//2 - (len(hand)*25 + 85 - 25)//2
+                        bx = x + 85 if i == 3 else x - 145
+                        for j, card in enumerate(hand):
+                            self.screen.blit(self.card_images[(card.rank, card.suit, 'small')], (bx, start_y + j*25))
+                else:
+                    bx, by = x - 35, y + 45 
+                    if i == 0: bx, by = x - 35, y - 140
+                    elif i == 1: bx, by = x - 155, y - 30
+                    elif i == 3: bx, by = x + 85, y - 30
+                    self.screen.blit(self.card_images['back'], (bx, by))
+                    pygame.draw.circle(self.screen, RED, (bx + 60, by + 10), 15)
+                    txt = self.font_small.render(str(len(hand)), True, WHITE)
+                    self.screen.blit(txt, (bx + 60 - txt.get_width()//2, by + 10 - txt.get_height()//2))
+            e_idx += 1
+
+        if phase == "PLAYING":
+            actual_moves = [m for m in self.move_history if m[1] is not None][-3:]
+            for k, (name, cards) in enumerate(actual_moves):
+                off_x, off_y = (k-1)*40, (k-1)*50
+                sx = SCREEN_WIDTH//2 - (len(cards)*25 + 60 - 25)//2 + off_x
+                for j, card in enumerate(cards):
+                    self.screen.blit(self.card_images[(card.rank, card.suit, 'small')], (sx + j*25, 320 + off_y))
+
+    def draw_end_result(self):
         scores = self.engine.state.last_scores
-        msg = "Ván đấu kết thúc!\n\n"
-        for i in range(len(scores)):
-            msg += f"{self.engine.player_names[i]}: {'+' if scores[i]>0 else ''}{scores[i]:,}đ\n"
-        messagebox.showinfo("Kết quả", msg)
+        panel = pygame.Rect(SCREEN_WIDTH//2 - 200, SCREEN_HEIGHT//2 - 150, 400, 300)
+        pygame.draw.rect(self.screen, (20, 20, 20), panel, border_radius=15)
+        pygame.draw.rect(self.screen, GOLD, panel, 3, border_radius=15)
+        txt_title = self.font_big.render("KẾT QUẢ", True, GOLD)
+        self.screen.blit(txt_title, (panel.centerx - txt_title.get_width()//2, panel.y + 20))
+        for i, score in enumerate(scores):
+            name = self.engine.player_names[i]
+            color = (100, 255, 100) if score >= 0 else (255, 100, 100)
+            txt = self.font_main.render(f"{name}: {'+' if score>0 else ''}{score:,}đ", True, color)
+            self.screen.blit(txt, (panel.x + 50, panel.y + 80 + i*40))
+        self.draw_button("TIẾP TỤC", SCREEN_WIDTH//2-100, SCREEN_HEIGHT//2+100, 200, 60, BLUE_SOFT)
 
-    def bot_move(self):
-        cur = self.engine.get_current_player()
-        if cur and not cur.is_human and self.engine.state.phase == "PLAYING":
-            move = cur.choose_move(self.engine.get_valid_moves(), self.engine.can_pass())
-            self.execute_move(move)
+    def draw_sam_panel(self):
+        panel = pygame.Rect(SCREEN_WIDTH//2 - 150, 300, 300, 180)
+        pygame.draw.rect(self.screen, (20, 20, 20), panel, border_radius=15)
+        pygame.draw.rect(self.screen, GOLD, panel, 3, border_radius=15)
+        txt = self.font_main.render("BẠN CÓ BÁO SÂM?", True, GOLD)
+        self.screen.blit(txt, (panel.centerx - txt.get_width()//2, 330))
+        self.draw_button("BÁO SÂM", SCREEN_WIDTH//2-110, 400, 100, 50, RED)
+        self.draw_button("KHÔNG", SCREEN_WIDTH//2+10, 400, 100, 50, (100, 100, 100))
 
-    def run(self): self.root.mainloop()
-
-def success_state(res):
-    if isinstance(res, bool): return res
-    if isinstance(res, tuple): return res[0]
-    return False
+    def draw_button(self, text, x, y, w, h, color):
+        rect = pygame.Rect(x, y, w, h)
+        pygame.draw.rect(self.screen, color, rect, border_radius=10)
+        pygame.draw.rect(self.screen, WHITE, rect, 2, border_radius=10)
+        txt = self.font_small.render(text, True, WHITE)
+        self.screen.blit(txt, (rect.centerx - txt.get_width()//2, rect.centery - txt.get_height()//2))
 
 if __name__ == "__main__":
     gui = SamLocGUI()
