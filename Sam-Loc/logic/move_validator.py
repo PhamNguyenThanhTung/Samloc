@@ -19,11 +19,10 @@ def validate_move(player_hand, move, last_move=None):
             return False, f"Lá {card} không có trong tay"
         hand_copy.remove(card)
 
-    # Luật Thối 2: Không được về nhất bằng lá 2 (đơn, đôi, tam)
-    # Nếu đánh hết bài (len(move) == len(player_hand)) và bài đánh ra toàn là 2
-    if len(move) == len(player_hand):
-        if all(c.rank == 15 for c in move) and len(move) < 4:
-            return False, "Không được về nhất bằng lá 2"
+    # Luật Thối 2: Xử lý tại Engine để tính phạt, ở đây cho phép đánh để không bị kẹt game
+    # if len(move) == len(player_hand):
+    #     if all(c.rank == 15 for c in move) and len(move) < 4:
+    #         return False, "Không được về nhất bằng lá 2"
 
     # Kiểm tra tổ hợp
     typ = get_combination_type(move)
