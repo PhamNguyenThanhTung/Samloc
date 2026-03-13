@@ -66,19 +66,32 @@ def generate_all_valid_moves(hand):
             moves.append(cards[:4])  # đơn giản lấy 4 lá đầu
 
     # Sảnh
-    # Luật Sâm: Sảnh không được chứa 2 (rank 15)
+    # 1. Sảnh thường (3-4-5...J-Q-K-A)
     unique_ranks = sorted(set(c.rank for c in hand if c.rank != 15))
-    # Tìm tất cả các đoạn liên tiếp độ dài >=3
     for length in range(3, len(unique_ranks) + 1):
         for i in range(len(unique_ranks) - length + 1):
-            segment = unique_ranks[i:i+length]# kiểm tra đoạn này có phải là sảnh không
+            segment = unique_ranks[i:i+length]
             if all(segment[j] == segment[j-1] + 1 for j in range(1, length)):
-                # Có sảnh với các rank này
-                # Lấy tất cả lá của mỗi rank
                 cards_by_rank = {r: [c for c in hand if c.rank == r] for r in segment}
-                # Tích Descartes
                 for combo in itertools.product(*[cards_by_rank[r] for r in segment]):
                     moves.append(list(combo))
+
+    # 2. Sảnh đặc biệt (A-2-3...)
+    all_ranks_in_hand = set(c.rank for c in hand)
+    if 15 in all_ranks_in_hand and 14 in all_ranks_in_hand and 3 in all_ranks_in_hand:
+        # Xây dựng chuỗi A-2-3-4... dài nhất có thể
+        special_sequence = [14, 15]
+        curr = 3
+        while curr in all_ranks_in_hand:
+            special_sequence.append(curr)
+            curr += 1
+        
+        # Sinh các sảnh con có độ dài từ 3 trở lên, bắt buộc phải có A-2-3
+        for length in range(3, len(special_sequence) + 1):
+            segment = special_sequence[:length]
+            cards_by_rank = {r: [c for c in hand if c.rank == r] for r in segment}
+            for combo in itertools.product(*[cards_by_rank[r] for r in segment]):
+                moves.append(list(combo))
 
     # Loại bỏ trùng lặp (chuyển thành tuple đã sắp xếp)
     unique = []

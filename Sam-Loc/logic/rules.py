@@ -6,9 +6,8 @@ def check_instant_win(hand):
     if len(hand) != 10:
         return False, None
 
-    ranks = sorted([c.rank for c in hand])
-    # Sảnh Rồng
-    if len(set(ranks)) == 10 and ranks[-1] - ranks[0] == 9:
+    # Sử dụng logic của sảnh đã cập nhật để kiểm tra sảnh rồng (sảnh 10 lá)
+    if get_combination_type(hand) == "STRAIGHT" and len(hand) == 10:
         return True, "DRAGON_STRAIGHT"
 
     rank_counts = Counter(c.rank for c in hand)
@@ -47,24 +46,35 @@ def get_combination_type(cards):
         if is_same_rank:
             return "PAIR"
         return None
-    if n == 3:
-        if is_same_rank:
-            return "TRIPLE"
-        # Kiểm tra sảnh 3 lá
-        if all(ranks[i] == ranks[i-1] + 1 for i in range(1, n)) and 15 not in ranks:
-            return "STRAIGHT"
-        return None
-    if n == 4:
-        if is_same_rank:
-            return "FOUR_OF_A_KIND"
     
-    # Kiểm tra sảnh n >= 4
-    if n >= 4:
-        if len(set(ranks)) == n and all(ranks[i] == ranks[i-1] + 1 for i in range(1, n)):
-            # Luật Sâm: 2 (rank 15) không được nằm trong sảnh
-            if 15 in ranks:
+    if is_same_rank:
+        if n == 3: return "TRIPLE"
+        if n == 4: return "FOUR_OF_A_KIND"
+        return None
+
+    # Kiểm tra sảnh n >= 3
+    if n >= 3:
+        # Trường hợp đặc biệt: Sảnh A-2-3... (A=14, 2=15, 3=3, 4=4...)
+        # Để kiểm tra, nếu có cả 15 và 3, ta thử chuẩn hóa 14->1, 15->2
+        check_ranks = ranks
+        if 15 in ranks and 3 in ranks:
+            # Luật Sâm: 2 chỉ được nằm trong sảnh nếu có Át và 3 đi kèm (A-2-3)
+            if 14 not in ranks:
+                return None
+            
+            norm_ranks = []
+            for r in ranks:
+                if r == 14: norm_ranks.append(1)
+                elif r == 15: norm_ranks.append(2)
+                else: norm_ranks.append(r)
+            check_ranks = sorted(norm_ranks)
+
+        if len(set(check_ranks)) == n and all(check_ranks[i] == check_ranks[i-1] + 1 for i in range(1, n)):
+            # Nếu sảnh bình thường (không có 3) mà lại chứa 2 (15) thì không hợp lệ
+            if 15 in ranks and 3 not in ranks:
                 return None
             return "STRAIGHT"
+            
     return None
 
 def get_combination_value(cards):
@@ -72,8 +82,19 @@ def get_combination_value(cards):
     typ = get_combination_type(cards)
     if typ is None or typ == "PASS":
         return 0
+    
     if typ == "STRAIGHT":
-        return max(c.rank for c in cards)
+        ranks = [c.rank for c in cards]
+        # Nếu là sảnh A-2-3, giá trị cao nhất là quân bài cuối sau khi chuẩn hóa (ví dụ A-2-3 là 3)
+        if 15 in ranks and 3 in ranks:
+            norm_ranks = []
+            for r in ranks:
+                if r == 14: norm_ranks.append(1)
+                elif r == 15: norm_ranks.append(2)
+                else: norm_ranks.append(r)
+            return max(norm_ranks)
+        return max(ranks)
+    
     return cards[0].rank
 
 def can_beat(played, current):

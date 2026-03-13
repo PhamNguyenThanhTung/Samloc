@@ -1,0 +1,69 @@
+================================================================================
+BÁO CÁO CHI TIẾT CẤU TRÚC DỰ ÁN: SÂM LỐC PRO (AI REINFORCEMENT LEARNING)
+================================================================================
+
+Dự án là một hệ thống game bài Sâm Lốc hoàn chỉnh, kết hợp giữa giao diện đồ họa (Pygame) 
+và công nghệ trí tuệ nhân tạo học tăng cường (Deep Reinforcement Learning).
+
+--------------------------------------------------------------------------------
+1. THƯ MỤC GỐC (ROOT) - ĐIỀU KHIỂN CHÍNH & AI CỐT LÕI
+--------------------------------------------------------------------------------
+- main.py: Điểm khởi đầu của ứng dụng. Khởi chạy giao diện đồ họa (GUI).
+- ai_model.py: Định nghĩa kiến trúc Mạng nơ-ron (SamLocQNetwork). Sử dụng MLP 
+  (Multi-Layer Perceptron) với 164 đầu vào để chấm điểm (Q-value) cho từng nước đi.
+- ai_agent.py: Tác tử AI (DMCAgent). Chịu trách nhiệm mã hóa trạng thái ván bài, 
+  phân loại Tier cho các nước đi và sử dụng "Bộ não" (ai_model) để chọn nước đi tối ưu.
+- train.py: Chương trình huấn luyện AI. Cho phép AI tự chơi với chính nó (Self-play) 
+  hàng ngàn ván, tính toán phần thưởng (Reward) và cập nhật trọng số cho mô hình.
+- samloc_ai_model.pth (Sinh ra sau khi train): File chứa toàn bộ tri thức của AI.
+
+--------------------------------------------------------------------------------
+2. THƯ MỤC LOGIC (Sam-Loc/logic/) - TRÁI TIM CỦA GAME
+--------------------------------------------------------------------------------
+- cards.py: Định nghĩa đối tượng Card (Lá bài) và Deck (Bộ bài). Xử lý việc 
+  chia bài, xáo bài và định danh các quân bài (Rank, Suit).
+- rules.py: Bộ luật Sâm Lốc cốt lõi. Nhận diện các tổ hợp (Sám, Sảnh, Tứ quý,...). 
+  Đặc biệt: Đã xử lý luật sảnh A-2-3 là sảnh nhỏ nhất.
+- move_validator.py: Bộ kiểm tra nước đi hợp lệ. Chịu trách nhiệm sinh ra tất cả 
+  các khả năng đánh bài (Cartesian Product) và kiểm tra xem có chặn được bài đối thủ không.
+- game_engine.py: Quản lý vòng đời ván game (Chia bài -> Báo Sâm -> Đánh bài -> Kết thúc).
+- scoring.py: Hệ thống tính điểm thưởng/phạt chi tiết (Thắng sâm, đền sâm, thối 2, cóng).
+- save_manager.py: Quản lý việc lưu trữ tên người chơi và số tiền vào file JSON.
+- ai_utils.py: Công cụ hỗ trợ AI. Chuyển đổi lá bài thành ma trận Numpy 4x13 và 
+  phân loại nước đi theo 5 cấp độ Tier (0-4).
+- rl_env.py: Môi trường Reinforcement Learning (Gym-like). Biến Game Engine thành 
+  một môi trường cho AI tương tác, tính toán "phần thưởng" (Reward Shaping) để AI học.
+
+--------------------------------------------------------------------------------
+3. THƯ MỤC NGƯỜI CHƠI (Sam-Loc/player/) - CÁC LOẠI TÁC TỬ
+--------------------------------------------------------------------------------
+- base_player.py: Lớp cha định nghĩa các thuộc tính chung của người chơi (Tên, Tiền, Bài).
+- human_player.py: Xử lý tương tác khi người chơi là con người.
+- bot.py (RandomBot, BotV0): Bot cấp độ dễ, đánh ngẫu nhiên hoặc đánh lá nhỏ nhất.
+- bot_v1.py & bot_v2.py: Bot cấp độ trung bình/khó, có chiến thuật giữ bài và xả 2 sớm.
+
+--------------------------------------------------------------------------------
+4. THƯ MỤC GIAO DIỆN (Sam-Loc/ui/) - HIỂN THỊ & TƯƠNG TÁC
+--------------------------------------------------------------------------------
+- gui.py: Giao diện đồ họa chính sử dụng Pygame. Hiển thị bàn chơi, hiệu ứng bài, 
+  âm thanh (nếu có) và quản lý các nút bấm.
+- console_ui.py: Giao diện dòng lệnh (Terminal) để test logic nhanh.
+- display.py & input_handle.py: Các hàm bổ trợ hiển thị và xử lý nhập liệu từ bàn phím.
+- game_menu.py: Quản lý các menu trong game (Tạm dừng, Lưu, Thoát).
+
+--------------------------------------------------------------------------------
+5. DỮ LIỆU & TÀI NGUYÊN (Sam-Loc/data/ & img/)
+--------------------------------------------------------------------------------
+- data/save_game.json: Lưu trữ tiến trình của người chơi (Tiền và Tên).
+- img/: Chứa hình ảnh các lá bài (PNG) và hình nền bàn chơi.
+
+================================================================================
+CƠ CHẾ HOẠT ĐỘNG CỦA AI TRONG DỰ ÁN
+================================================================================
+1. Quan sát (Observation): AI nhìn vào Ma trận 4x13 bài mình và số bài đối thủ.
+2. Suy nghĩ (Action Encoding): AI lấy tất cả các nước đi hợp lệ, gắn nhãn Tier.
+3. Chấm điểm (Q-Evaluation): Mạng nơ-ron chấm điểm cho từng nước đi.
+4. Hành động (Step): AI chọn nước đi điểm cao nhất.
+5. Học tập (Monte Carlo): Sau khi hết ván, AI so sánh kết quả cuối cùng với các 
+   quyết định đã đưa ra để rút kinh nghiệm (Backpropagation).
+================================================================================

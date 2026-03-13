@@ -69,7 +69,7 @@ class SamLocGUI:
         ]
 
     def load_assets(self):
-        bg_path = os.path.join('img', 'table', 'table_background.png')
+        bg_path = os.path.join('img', 'table', 'table_background.jpg')
         if os.path.exists(bg_path):
             self.bg_img = pygame.image.load(bg_path).convert()
             self.bg_img = pygame.transform.scale(self.bg_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
