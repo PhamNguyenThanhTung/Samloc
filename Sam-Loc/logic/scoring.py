@@ -1,4 +1,6 @@
 # logic/scoring.py
+from collections import Counter
+
 class ScoringSystem:
     def __init__(self, base_bet=1000):
         """Khởi tạo hệ thống tính điểm."""
@@ -64,7 +66,6 @@ class ScoringSystem:
             twos = sum(1 for c in hand if c.rank == 15)
             count = 20 if num_cards == 10 else num_cards
             count += (twos * self.penalty_points['TWO_LEFT'])
-            from collections import Counter
             counts = Counter(c.rank for c in hand)
             for r, cnt in counts.items():
                 if cnt == 4: count += self.penalty_points['FOUR_OF_A_KIND']

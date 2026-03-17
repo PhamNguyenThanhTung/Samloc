@@ -1,39 +1,73 @@
-# player/bot_v2.py
+import os
+import torch
+import numpy as np
 from .base_player import BasePlayer
-from logic.rules import get_combination_value, get_combination_type
+
+from ai_agent import DMCAgent
+from logic.ai_utils import get_state_matrix
+
+# Đường dẫn file model: cùng thư mục với player/, file nằm ở thư mục gốc project
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_MODEL_PATH = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "samloc_ai_model.pth"))
+
 
 class BotV2(BasePlayer):
     def __init__(self, name, money=100000):
         super().__init__(name, money)
         self.is_human = False
+        self.agent = DMCAgent(is_training=False)
+        try:
+            self.agent.model.load_state_dict(torch.load(_DEFAULT_MODEL_PATH, map_location=torch.device("cpu")))
+            self.agent.model.eval()  # Khóa mạng nơ-ron, không học thêm nữa
+            print(f"[{name}] Đã nạp thành công bộ não AI!")
+        except Exception as e:
+            print(f"[{name}] Lỗi không tìm thấy bộ não AI: {e}")
 
-    def choose_move(self, valid_moves, can_pass=False):
-        if not valid_moves: return None
+    def choose_move(self, valid_moves, can_pass=False, game_engine=None):
+        """
+        Ghi đè hàm chọn nước đi. AI dùng toán học để chọn bài thay vì if/else.
+        LƯU Ý: Phải truyền thêm game_engine vào đây để AI nhìn được bàn chơi!
+        """
+        # Nếu không có nước đi hợp lệ
+        if not valid_moves:
+            return None
 
-        # Logic theo yêu cầu: Nếu còn 1 lá và là lá 2
-        if len(self.hand) == 1 and self.hand[0].rank == 15:
-            twos = [m for m in valid_moves if any(c.rank == 15 for c in m)]
-            if twos: return twos[0] # "Phải đánh 2 trước"
-            if can_pass: return None # "Không thì bỏ lượt không được đánh"
+        # Console/CLI không truyền game_engine — fallback dùng greedy nhỏ nhất như BotV0
+        if game_engine is None:
+            from logic.rules import get_combination_value
+            return min(valid_moves, key=lambda m: get_combination_value(m)) if valid_moves else None
 
-        sorted_desc = sorted(valid_moves, key=lambda m: get_combination_value(m), reverse=True)
-        sorted_asc = sorted(valid_moves, key=lambda m: get_combination_value(m))
+        # --- AI BẮT ĐẦU QUAN SÁT (OBSERVATION) ---
+        current_p = game_engine.state.current_player
 
-        # LUẬT QUAN TRỌNG: GIẢI PHÓNG 2 SỚM
-        # Bot V2 thông minh hơn, nếu còn ít lá hoặc có cơ hội là đánh 2 ngay để tránh thối
-        if len(self.hand) <= 4:
-            twos = [m for m in valid_moves if any(c.rank == 15 for c in m)]
-            if twos: return twos[0]
+        # 1. Trích xuất ma trận bài trên tay
+        M_hand = get_state_matrix(self.hand)
 
-        if can_pass:
-            # Ưu tiên đánh quân to nhất (ép bài) nhưng né quân 2 nếu chưa cần thiết
-            best_non_two = [m for m in sorted_desc if not any(c.rank == 15 for c in m)]
-            if best_non_two: return best_non_two[0]
-            return sorted_desc[0]
-        else:
-            straights = [m for m in valid_moves if get_combination_type(m) == "STRAIGHT"]
-            if straights: return max(straights, key=len)
-            for combo_type in ["FOUR_OF_A_KIND", "TRIPLE", "PAIR"]:
-                combos = [m for m in valid_moves if get_combination_type(m) == combo_type]
-                if combos: return sorted(combos, key=lambda m: get_combination_value(m), reverse=True)[0]
-            return sorted_desc[0]
+        # --- CODE SỬA LỖI MỚI ---
+        # Lấy số bài của các người chơi đang ngồi trong bàn
+        opponents_cards = [len(game_engine.player_hands[i]) for i in range(game_engine.num_players) if i != current_p]
+
+        # Bơm thêm các số 0 vào cho đủ 3 đối thủ (ghế trống) để chiều lòng mạng nơ-ron 164 features
+        while len(opponents_cards) < 3:
+            opponents_cards.append(0)
+
+        V_size = np.array(opponents_cards, dtype=np.float32)
+        # ------------------------
+
+        # 3. Trích xuất ma trận bài đối thủ vừa đánh (nằm trên bàn)
+        last_move = game_engine.state.last_move
+        M_board = get_state_matrix(last_move) if last_move else np.zeros((4, 13), dtype=np.float32)
+
+        obs = {"M_hand": M_hand, "V_size": V_size, "M_board": M_board}
+
+        # --- AI SUY LUẬN ---
+        # AI sẽ được quyền tự do bung bài (is_lead = True) nếu trên bàn chưa có ai đánh (last_move là None)
+        is_lead = (last_move is None)
+
+        best_action = self.agent.select_action(obs, valid_moves, is_lead=is_lead)
+
+        # Trả về kết quả: Nếu AI quyết định bỏ lượt (best_action rỗng) thì trả về None theo chuẩn code cũ của bạn
+        if not best_action and can_pass:
+            return None
+
+        return best_action

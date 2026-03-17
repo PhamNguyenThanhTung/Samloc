@@ -17,6 +17,10 @@ from logic.ai_utils import evaluate_tier
 NUM_EPISODES = 5000       # Số ván game muốn AI tự chơi
 LEARNING_RATE = 1e-4      # Tốc độ học
 GAMMA = 0.99              # Hệ số suy giảm phần thưởng
+EPSILON_START = 1.0       # Epsilon đầu (khám phá)
+EPSILON_END = 0.05        # Epsilon cuối (sau khi decay)
+EPSILON_DECAY_FRAC = 0.8  # Decay epsilon trong 80% số ván đầu, 20% cuối pure exploitation
+GRAD_CLIP_NORM = 1.0      # Clip gradient để tránh bùng nổ
 
 def calculate_returns(rewards, gamma):
     """Tính toán phần thưởng tích lũy (G_t) từ cuối ván ngược lên đầu ván."""
@@ -43,74 +47,57 @@ def train():
             print(f"Không thể tải model cũ: {e}")
 
     optimizer = optim.Adam(agent.model.parameters(), lr=LEARNING_RATE)
-    criterion = nn.MSELoss() # Hàm mất mát: So sánh Q-value dự đoán và Thực tế
+    criterion = nn.MSELoss()
+    decay_episodes = max(1, int(NUM_EPISODES * EPSILON_DECAY_FRAC))
 
     for episode in range(NUM_EPISODES):
         obs = env.reset()
         done = False
-        
-        # Lưu trữ lịch sử của ván đấu: (state_tensor, action_tensor, tier_tensor, reward)
-        transitions = []
+        transitions_by_player = {i: [] for i in range(4)}
+        epsilon = max(EPSILON_END, EPSILON_START - (EPSILON_START - EPSILON_END) * episode / decay_episodes)
 
         while not done:
-            # Lấy thông tin người chơi hiện tại từ engine
+            cur_player = env.game.state.current_player
             valid_actions = env.game.get_valid_moves()
-            
-            # Chọn hành động bằng AI
-            action = agent.select_action(obs, valid_actions, is_lead=(env.game.state.last_move is None))
-            
-            # Đóng gói State, Action, Tier thành Tensor để lát nữa học
+            action = agent.select_action(obs, valid_actions, is_lead=(env.game.state.last_move is None), epsilon=epsilon)
+
             tier_val = evaluate_tier(action)
-            
-            # Tiền xử lý state giống như trong agent.select_action
             state_vec = np.concatenate([
-                obs["M_hand"].flatten(), 
-                obs["M_board"].flatten(), 
+                obs["M_hand"].flatten(),
+                obs["M_board"].flatten(),
                 obs["V_size"]
             ])
             s_tensor = torch.FloatTensor(state_vec).unsqueeze(0)
             a_tensor = torch.FloatTensor(agent._encode_action(action).flatten()).unsqueeze(0)
             t_tensor = torch.FloatTensor(agent._encode_tier(tier_val)).unsqueeze(0)
-            
-            # Thực hiện hành động vào môi trường
+
             next_obs, reward, done, info = env.step(action)
-            
-            # Lưu lại bước này (lưu tensor để tránh tính toán lại)
-            transitions.append((s_tensor, a_tensor, t_tensor, reward))
-            
+            transitions_by_player[cur_player].append((s_tensor, a_tensor, t_tensor, reward))
             obs = next_obs
 
-        # --- BẮT ĐẦU CẬP NHẬT TRỌNG SỐ (HỌC) KHI VÁN KẾT THÚC ---
-        if not transitions:
-            continue
+        # Shared model: gom loss của tất cả người chơi rồi update 1 lần (gradient nhất quán)
+        agent.model.train()
+        all_losses = []
+        for player_id, player_transitions in transitions_by_player.items():
+            if not player_transitions:
+                continue
+            rewards = [t[3] for t in player_transitions]
+            returns = calculate_returns(rewards, GAMMA)
+            for i, (s_tensor, a_tensor, t_tensor, _) in enumerate(player_transitions):
+                predicted_q = agent.model(s_tensor, a_tensor, t_tensor)
+                target_q = torch.tensor([[returns[i]]], dtype=torch.float32)
+                all_losses.append(criterion(predicted_q, target_q))
 
-        rewards = [t[3] for t in transitions]
-        returns = calculate_returns(rewards, GAMMA) # Tính G_t
-        
-        agent.model.train() # Chuyển sang chế độ train
-        optimizer.zero_grad() # Xóa gradient cũ
-        
-        episode_loss = 0
-        for i, (s_tensor, a_tensor, t_tensor, _) in enumerate(transitions):
-            # 1. AI dự đoán Q-value
-            predicted_q = agent.model(s_tensor, a_tensor, t_tensor)
-            
-            # 2. Q-value thực tế tính từ kết quả ván game (G_t)
-            target_q = torch.FloatTensor([returns[i]]).unsqueeze(0)
-            
-            # 3. Tính độ lệch (Loss)
-            loss = criterion(predicted_q, target_q)
-            episode_loss += loss
-            
-        # 4. Truyền ngược (Backpropagation) để sửa trọng số nơ-ron
-        if len(transitions) > 0:
-            avg_loss = episode_loss / len(transitions)
+        if all_losses:
+            optimizer.zero_grad()
+            avg_loss = torch.stack(all_losses).mean()
             avg_loss.backward()
+            torch.nn.utils.clip_grad_norm_(agent.model.parameters(), max_norm=GRAD_CLIP_NORM)
             optimizer.step()
 
-        # In tiến độ
-        if (episode + 1) % 100 == 0:
-            print(f"Ván {episode + 1}/{NUM_EPISODES} - Tổng thưởng: {sum(rewards):.2f} - Loss: {avg_loss.item():.64f}")
+        if all_losses and (episode + 1) % 100 == 0:
+            total_reward = sum(t[3] for trans in transitions_by_player.values() for t in trans)
+            print(f"Ván {episode + 1}/{NUM_EPISODES} - Tổng thưởng: {total_reward:.2f} - Loss: {avg_loss.item():.6f}")
             # Lưu model định kỳ mỗi 500 ván
             if (episode + 1) % 500 == 0:
                 torch.save(agent.model.state_dict(), model_path)

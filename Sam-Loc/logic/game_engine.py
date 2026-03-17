@@ -136,14 +136,15 @@ class GameEngine:
                 self.state.last_scores = self._update_scores() 
                 return True, f"{self.player_names[self.state.sam_announcer]} bị CHẶN SÂM!"
 
+            prev_last_player = self.state.last_player
             self.state.last_move = move
             self.state.last_player = player_idx
             if len(hand) == 0:
-                # LUẬT SÂM: KHÔNG ĐƯỢC VỀ BẰNG 2
                 if any(c.rank == 15 for c in move):
-                    # Thối 2 khi về: Xử thua người này, người thắng là người đánh trước đó (hoặc tạm thời xử thua)
                     self.state.phase = "FINISHED"
-                    self.state.winner = (player_idx + 1) % self.num_players # Chuyển người thắng cho người kế tiếp
+                    # Người thắng là người đang dẫn (vừa đánh trước đó). prev_last_player = -1 chỉ khi
+                    # đây là nước đầu ván — thối 2 đầu ván không thể xảy ra (tay 10 lá, không hết sau 1 nước).
+                    self.state.winner = prev_last_player if prev_last_player >= 0 else (player_idx + 1) % self.num_players
                     self.state.last_scores = self._update_scores(is_thoi_2_ve=True, thoi_player=player_idx)
                     return True, "Thối 2 khi về!"
                 
@@ -163,7 +164,9 @@ class GameEngine:
 
     def _next_player(self):
         next_p = (self.state.current_player + 1) % self.num_players
-        while next_p in self.state.passed_players:
+        for _ in range(self.num_players):
+            if next_p not in self.state.passed_players:
+                break
             next_p = (next_p + 1) % self.num_players
         self.state.current_player = next_p
 
@@ -179,3 +182,15 @@ class GameEngine:
         hand = self.player_hands[self.state.current_player]
         if self.state.last_move is None: return generate_all_valid_moves(hand)
         return generate_counter_moves(hand, self.state.last_move)
+
+    def get_game_summary(self):
+        """Chuỗi tóm tắt ván cho console UI."""
+        lines = [f"Phase: {self.state.phase}", f"Lượt: {self.state.current_player}"]
+        names = self.player_names if self.player_names else [f"P{i}" for i in range(self.num_players)]
+        for i in range(self.num_players):
+            hand_size = len(self.player_hands[i])
+            cur = " ←" if i == self.state.current_player else ""
+            lines.append(f"  {names[i]}: {hand_size} lá{cur}")
+        if self.state.last_move:
+            lines.append(f"Bài trên bàn: {[str(c) for c in self.state.last_move]}")
+        return "\n".join(lines)

@@ -1,4 +1,5 @@
 # logic/move_validator.py
+from collections import defaultdict
 from .rules import get_combination_type, can_beat
 import itertools
 
@@ -47,7 +48,6 @@ def generate_all_valid_moves(hand):
         moves.append([card])
 
     # Gom nhóm theo rank
-    from collections import defaultdict
     rank_groups = defaultdict(list)
     for card in hand:
         rank_groups[card.rank].append(card)
@@ -61,9 +61,10 @@ def generate_all_valid_moves(hand):
         if len(cards) >= 3:
             for triple in itertools.combinations(cards, 3):
                 moves.append(list(triple))
-        # Tứ quý (lấy 4 lá đầu tiên, vì có thể có nhiều hơn 4? không)
+        # Tứ quý: mỗi rank tối đa 4 lá (bộ bài chuẩn), sinh 1 tổ hợp. can_beat() dùng để
+        # chặn đơn 2 / đôi 2 / sám 2 — generate_counter_moves lọc nên tứ quý vẫn xuất hiện khi cần.
         if len(cards) >= 4:
-            moves.append(cards[:4])  # đơn giản lấy 4 lá đầu
+            moves.append(cards[:4])
 
     # Sảnh
     # 1. Sảnh thường (3-4-5...J-Q-K-A)
@@ -76,17 +77,15 @@ def generate_all_valid_moves(hand):
                 for combo in itertools.product(*[cards_by_rank[r] for r in segment]):
                     moves.append(list(combo))
 
-    # 2. Sảnh đặc biệt (A-2-3...)
+    # 2. Sảnh đặc biệt (A-2-3...). Luật Sâm: 2 chỉ được nằm trong sảnh khi có A và 3,
+    # nên sảnh loại này luôn bắt đầu từ A (index 0); không sinh sảnh 2-3-4 riêng (cố ý).
     all_ranks_in_hand = set(c.rank for c in hand)
     if 15 in all_ranks_in_hand and 14 in all_ranks_in_hand and 3 in all_ranks_in_hand:
-        # Xây dựng chuỗi A-2-3-4... dài nhất có thể
         special_sequence = [14, 15]
         curr = 3
         while curr in all_ranks_in_hand:
             special_sequence.append(curr)
             curr += 1
-        
-        # Sinh các sảnh con có độ dài từ 3 trở lên, bắt buộc phải có A-2-3
         for length in range(3, len(special_sequence) + 1):
             segment = special_sequence[:length]
             cards_by_rank = {r: [c for c in hand if c.rank == r] for r in segment}

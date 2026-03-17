@@ -23,6 +23,7 @@ class HumanPlayer(BasePlayer):
                     return valid_moves[choice]
                 if can_pass and choice == len(valid_moves):
                     return None
-                print(f"Vui lòng chọn từ 0 đến {len(valid_moves) if not can_pass else len(valid_moves)}")
+                max_idx = len(valid_moves) if can_pass else len(valid_moves) - 1
+                print(f"Vui lòng chọn từ 0 đến {max_idx}")
             except ValueError:
                 print("Vui lòng nhập số!")

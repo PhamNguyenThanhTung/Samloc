@@ -20,6 +20,9 @@ class Card:
     def __eq__(self, other):
         return self.rank == other.rank and self.suit == other.suit
 
+    def __hash__(self):
+        return hash((self.rank, self.suit))
+
     def __lt__(self, other):
         if self.rank != other.rank:
             return self.rank < other.rank
@@ -53,7 +56,7 @@ class Deck:
             raise ValueError("Not enough cards")
         drawn = self.cards[:n]
         self.cards = self.cards[n:]
-        return drawn if n > 1 else drawn[0] if n == 1 else []
+        return drawn  # Luôn trả về list — caller unpack nếu cần 1 lá
 
     def __len__(self):
         return len(self.cards)

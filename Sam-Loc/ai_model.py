@@ -15,15 +15,18 @@ class SamLocQNetwork(nn.Module):
         # Tổng cộng: 52 + 52 + 3 + 52 + 5 = 164 features
         input_size = 164
         
-        # Thiết kế mạng Multi-Layer Perceptron (MLP)
+        # Thiết kế mạng Multi-Layer Perceptron (MLP) với Dropout để giảm overfitting
         self.network = nn.Sequential(
             nn.Linear(input_size, 512),
             nn.ReLU(),
+            nn.Dropout(0.2),
             nn.Linear(512, 512),
             nn.ReLU(),
+            nn.Dropout(0.2),
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256, 1) # Đầu ra là 1 giá trị Q-Value duy nhất
+            nn.Dropout(0.2),
+            nn.Linear(256, 1)
         )
 
     def forward(self, state_vector, action_vector, tier_vector):

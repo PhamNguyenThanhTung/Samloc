@@ -5,7 +5,9 @@ from logic.rules import get_combination_type
 
 def get_state_matrix(hand):
     """
-    Chuyển đổi list Card trên tay thành ma trận Numpy 4x13 (Suit-Agnostic).
+    Chuyển đổi list Card trên tay thành ma trận Numpy 4x13.
+    Suit-agnostic: hàng = số lượng lá của rank đó (0 = 0 lá, 1 = ≥1 lá, ...),
+    không lưu thông tin chất; phù hợp cho AI, không dùng để so sánh tie-break theo chất.
     """
     if not hand:
         return np.zeros((4, 13), dtype=np.float32)
@@ -25,8 +27,11 @@ def evaluate_tier(cards):
     Phân loại tổ hợp bài theo Tier (0 đến 4).
     Trả về số nguyên từ 0 (Mạnh nhất) đến 4 (Yếu nhất).
     """
-    if not cards: return 4 # Pass
+    if not cards:
+        return 4
     typ = get_combination_type(cards)
+    if typ is None:
+        return 4  # Tổ hợp không hợp lệ
     ranks = sorted([c.rank for c in cards])
     n = len(cards)
     

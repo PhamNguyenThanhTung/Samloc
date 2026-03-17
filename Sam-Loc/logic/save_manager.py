@@ -22,6 +22,6 @@ def load_game():
         try:
             with open(SAVE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
-            pass
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"[Warning] Không đọc được file save: {e}")
     return {"player_name": "Bạn", "money": 100000}

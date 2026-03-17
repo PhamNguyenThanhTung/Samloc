@@ -1,4 +1,5 @@
 # ai_agent.py
+import random
 import torch
 import numpy as np
 from logic.ai_utils import get_state_matrix, evaluate_tier
@@ -8,6 +9,8 @@ class DMCAgent:
     def __init__(self, is_training=True):
         self.model = SamLocQNetwork()
         self.is_training = is_training
+        if not is_training:
+            self.model.eval()
         
     def _encode_action(self, action_cards):
         """Chuyển hành động thành ma trận 4x13 giống như state"""
@@ -21,15 +24,19 @@ class DMCAgent:
         tier_vec[tier_val] = 1.0
         return tier_vec
 
-    def select_action(self, observation, valid_actions, is_lead=False):
+    def select_action(self, observation, valid_actions, is_lead=False, epsilon=0.0):
         """
         observation: State dict từ env._get_observation()
         valid_actions: List các action hợp lệ từ rules_engine
-        is_lead: True nếu đang được quyền đánh đầu
+        is_lead: True nếu đang được quyền đánh đầu (dùng ở get_valid_moves nếu cần)
+        epsilon: Xác suất chọn ngẫu nhiên để khám phá (chỉ dùng khi is_training=True)
         """
         if not valid_actions:
-            return [] # Bắt buộc bỏ lượt
-            
+            return []
+
+        if self.is_training and epsilon > 0 and np.random.random() < epsilon:
+            return random.choice(valid_actions)
+
         # Tiền xử lý vector trạng thái chung (s)
         # s = M_hand (flattened) + M_board (flattened) + V_size
         state_vec = np.concatenate([
@@ -42,15 +49,8 @@ class DMCAgent:
         best_action = None
         max_q_value = -float('inf')
         
-        # KHÂU CẮT TỈA (PRUNING) DỰA TRÊN TIER
-        filtered_actions = []
-        for action in valid_actions:
-            tier = evaluate_tier(action)
-            # Lọc heuristic có thể thêm vào đây
-            filtered_actions.append((action, tier))
-            
-        # Đưa các hành động qua mạng nơ-ron để chấm điểm
-        self.model.eval()
+        filtered_actions = [(action, evaluate_tier(action)) for action in valid_actions]
+
         with torch.no_grad():
             for action, tier in filtered_actions:
                 action_vec = self._encode_action(action).flatten()

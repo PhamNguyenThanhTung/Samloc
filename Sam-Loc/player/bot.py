@@ -17,6 +17,8 @@ class RandomBot(BasePlayer):
             twos = [m for m in valid_moves if any(c.rank == 15 for c in m)]
             if twos: return twos[0]
             if can_pass: return None
+            # Không chặn được, không bỏ lượt — valid_moves có thể rỗng (chỉ có 2)
+            if not valid_moves: return None
 
         if can_pass and random.random() < 0.3: return None
         return random.choice(valid_moves)

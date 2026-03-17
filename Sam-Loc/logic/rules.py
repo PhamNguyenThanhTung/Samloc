@@ -33,9 +33,10 @@ def check_instant_win(hand):
     return False, None
 
 def get_combination_type(cards):
-    """Xác định loại tổ hợp: SINGLE, PAIR, TRIPLE, FOUR_OF_A_KIND, STRAIGHT, hoặc None."""
+    """Xác định loại tổ hợp: SINGLE, PAIR, TRIPLE, FOUR_OF_A_KIND, STRAIGHT, hoặc None.
+    Trả về None khi rỗng/bỏ lượt (PASS xử lý ở engine)."""
     if not cards:
-        return "PASS"
+        return None
     n = len(cards)
     ranks = sorted([c.rank for c in cards])
     is_same_rank = len(set(ranks)) == 1
@@ -80,7 +81,7 @@ def get_combination_type(cards):
 def get_combination_value(cards):
     """Giá trị để so sánh (dùng rank cao nhất cho sảnh, rank của lá cho các loại khác)."""
     typ = get_combination_type(cards)
-    if typ is None or typ == "PASS":
+    if typ is None:
         return 0
     
     if typ == "STRAIGHT":
@@ -103,11 +104,16 @@ def can_beat(played, current):
     current_type = get_combination_type(current)
     if not played_type or not current_type:
         return False
-    if current_type == "PASS":
+    if current_type == "PASS" or current_type is None:
         return False
-    # Tứ quý chặn được 2
-    if current_type == "FOUR_OF_A_KIND" and played_type == "SINGLE" and played[0].rank == 15:
-        return True
+    # Tứ quý chặn được đơn 2, đôi 2, sám 2
+    if current_type == "FOUR_OF_A_KIND" and played[0].rank == 15:
+        if played_type == "SINGLE":
+            return True
+        if played_type == "PAIR":
+            return True
+        if played_type == "TRIPLE":
+            return True
     if played_type != current_type:
         return False
     played_val = get_combination_value(played)
