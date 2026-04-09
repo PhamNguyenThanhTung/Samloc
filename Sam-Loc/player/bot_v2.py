@@ -8,7 +8,7 @@ from logic.ai_utils import get_state_matrix
 
 # Đường dẫn file model: cùng thư mục với player/, file nằm ở thư mục gốc project
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT_MODEL_PATH = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "samloc_ai_model.pth"))
+_DEFAULT_MODEL_PATH = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "samloc_ai_model_v2.pth"))
 
 
 class BotV2(BasePlayer):
@@ -58,7 +58,10 @@ class BotV2(BasePlayer):
         last_move = game_engine.state.last_move
         M_board = get_state_matrix(last_move) if last_move else np.zeros((4, 13), dtype=np.float32)
 
-        obs = {"M_hand": M_hand, "V_size": V_size, "M_board": M_board}
+        # [MỚI] Khởi tạo M_played bằng 0 cho Bot trên giao diện
+        M_played = np.zeros((4, 13), dtype=np.float32)
+
+        obs = {"M_hand": M_hand, "V_size": V_size, "M_board": M_board, "M_played": M_played}
 
         # --- AI SUY LUẬN ---
         # AI sẽ được quyền tự do bung bài (is_lead = True) nếu trên bàn chưa có ai đánh (last_move là None)

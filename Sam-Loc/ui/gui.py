@@ -56,6 +56,9 @@ class SamLocGUI:
         self.board_display = []  # Bài hiển thị giữa sân vòng hiện tại [(name, cards), ...]
         self.show_bots = False
 
+        self.turn_start_time = 0
+        self.current_turn_player = -1
+
         self.menu_active = -1
         self.font_main = pygame.font.SysFont("Segoe UI", 22, bold=True)
         self.font_small = pygame.font.SysFont("Segoe UI", 18, bold=True)
@@ -123,7 +126,16 @@ class SamLocGUI:
                     self.dealing_anim['done'] = True
             return  # chặn bot đánh trong khi đang chia bài
         if self.engine and self.engine.state.phase == "PLAYING":
+            cur_p_idx = self.engine.state.current_player
+
+            # [MỚI] 1. Nếu chuyển lượt, reset đồng hồ về 0
+            if cur_p_idx != self.current_turn_player:
+                self.turn_start_time = pygame.time.get_ticks()
+                self.current_turn_player = cur_p_idx
+
             cur_p = self.engine.get_current_player()
+
+            # 2. Xử lý cho BOT (Delay 1 giây)
             if cur_p and not cur_p.is_human:
                 if not hasattr(self, 'bot_timer'): self.bot_timer = pygame.time.get_ticks()
                 if pygame.time.get_ticks() - self.bot_timer > 1000:
@@ -135,6 +147,20 @@ class SamLocGUI:
                         move = cur_p.choose_move(valid_moves, can_pass)
                     self.execute_move(move)
                     delattr(self, 'bot_timer')
+
+            # [MỚI] 3. Xử lý đếm ngược 30s cho NGƯỜI THẬT
+            elif cur_p and cur_p.is_human:
+                elapsed_seconds = (pygame.time.get_ticks() - self.turn_start_time) / 1000
+                if elapsed_seconds >= 30:
+                    print("[GUI] Hết 30 giây! Auto-play kích hoạt.")
+                    if self.engine.state.last_move is None:
+                        # Đi đầu: Chọn lá nhỏ nhất (sort theo rank rồi đến suit)
+                        hand = self.engine.player_hands[cur_p_idx]
+                        smallest_card = sorted(hand, key=lambda c: (c.rank, c.suit))[0]
+                        self.execute_move([smallest_card])
+                    else:
+                        # Bị đè: Tự động bỏ lượt
+                        self.execute_move([])
 
         if self.engine and self.engine.state.phase == "ANNOUNCING":
             idx = self.engine.state.announcement_index
@@ -360,6 +386,7 @@ class SamLocGUI:
         role = self.slots[i]
         is_turn = False
         use_engine = False
+
         if self.engine and self.session_slots[i]:
             e_idx = 0
             for j in range(i):
@@ -368,9 +395,12 @@ class SamLocGUI:
                 use_engine = True
                 if self.engine.state.phase == "PLAYING" and self.engine.state.current_player == e_idx:
                     is_turn = True
+
+        # Màu viền đổi thành Vàng nếu đang đến lượt
         color = GOLD if is_turn else WHITE
         pygame.draw.rect(self.screen, GRAY_DARK, (x - 75, y - 40, 150, 80), border_radius=10)
         pygame.draw.rect(self.screen, color, (x - 75, y - 40, 150, 80), 3, border_radius=10)
+
         if not role:
             txt = self.font_big.render("+", True, WHITE)
             self.screen.blit(txt, (x - txt.get_width() // 2, y - txt.get_height() // 2))
@@ -378,10 +408,29 @@ class SamLocGUI:
             name = self.user_name if role == 'HUMAN' else f"Bot {role[-2:]}"
             money = self.player_money_storage[i]
             is_pending = self.engine and not self.session_slots[i] and self.engine.state.phase != "FINISHED"
+
             txt_n = self.font_main.render(name, True, color if not is_pending else (150, 150, 150))
             txt_m = self.font_small.render(f"{money:,}đ", True, (100, 255, 100))
             self.screen.blit(txt_n, (x - txt_n.get_width() // 2, y - 25))
             self.screen.blit(txt_m, (x - txt_m.get_width() // 2, y + 5))
+
+            # --- [MỚI] VẼ ĐỒNG HỒ ĐẾM NGƯỢC NẾU ĐANG ĐẾN LƯỢT ---
+            if is_turn and hasattr(self, 'turn_start_time'):
+                elapsed = (pygame.time.get_ticks() - self.turn_start_time) / 1000
+                time_left = max(0, int(30 - elapsed))
+                time_color = RED if time_left <= 5 else GOLD
+
+                # Tạo một khung viền nhỏ ở góc trên bên phải Slot
+                bg_rect = pygame.Rect(x + 35, y - 55, 45, 25)
+                pygame.draw.rect(self.screen, (30, 30, 30), bg_rect, border_radius=5)
+                pygame.draw.rect(self.screen, time_color, bg_rect, 1, border_radius=5)
+
+                # Vẽ text số giây vào giữa khung
+                txt_time = self.font_main.render(f"{time_left}s", True, time_color)
+                self.screen.blit(txt_time, (bg_rect.centerx - txt_time.get_width() // 2,
+                                            bg_rect.centery - txt_time.get_height() // 2))
+            # -----------------------------------------------------
+
             if is_pending:
                 txt_p = self.font_small.render("(Chờ ván sau)", True, (200, 200, 200))
                 self.screen.blit(txt_p, (x - txt_p.get_width() // 2, y + 25))
@@ -429,6 +478,7 @@ class SamLocGUI:
                     self.draw_button("ĐÁNH", 950, 700, 110, 50, play_color)
                     pass_color = (200, 100, 30) if self.engine.state.last_move else (100, 100, 100)
                     self.draw_button("BỎ LƯỢT", 1070, 700, 110, 50, pass_color)
+
             else:
                 if self.show_bots:
                     if i == 0 or i == 2:

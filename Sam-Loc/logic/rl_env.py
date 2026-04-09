@@ -9,33 +9,26 @@ class SamLocEnv:
     def __init__(self, num_players=4):
         self.game = GameEngine(num_players=num_players)
 
-    def reset(self, skip_announce=True):
-        """Khởi tạo lại ván bài và trả về trạng thái đầu tiên.
-        skip_announce: Nếu True thì bỏ qua giai đoạn ANNOUNCING (Báo Sâm) để AI học đánh bài cơ bản trước.
-        """
+    def reset(self):
         self.game.setup_game()
-        if skip_announce and self.game.state.phase == "ANNOUNCING":
-            self.game.state.phase = "PLAYING"
+        # [MỚI] Khởi tạo thùng rác chứa bài đã đánh
+        self.played_cards = [] 
         return self._get_observation()
 
     def _get_observation(self):
-        """Đóng gói toàn bộ thông tin ván bài thành Tensors."""
-        current_p = self.game.state.current_player
-        hand = self.game.player_hands[current_p]
-
-        # 1. Ma trận bài trên tay
-        M_hand = get_state_matrix(hand)
-
-        # 2. Đếm số bài của đối thủ
-        V_size = np.array([len(self.game.player_hands[i]) for i in range(self.game.num_players) if i != current_p],
-                          dtype=np.float32)
-
-        # 3. Ma trận bài đang nằm trên bàn (last_move)
-        M_board = get_state_matrix(self.game.state.last_move) if self.game.state.last_move else np.zeros((4, 13),
-                                                                                                         dtype=np.float32)
-
-        # Trả về Dictionary chứa các tensor này
-        return {"M_hand": M_hand, "V_size": V_size, "M_board": M_board}
+        hand = self.game.player_hands[self.game.state.current_player]
+        board = self.game.state.last_move if self.game.state.last_move else []
+        
+        # [MỚI] Tạo ma trận M_played và thêm vào obs
+        M_played = get_state_matrix(self.played_cards)
+        
+        obs = {
+            "M_hand": get_state_matrix(hand),
+            "M_board": get_state_matrix(board),
+            "M_played": M_played, # Cập nhật thêm M_played
+            "V_size": np.array([len(self.game.player_hands[i]) for i in range(self.game.num_players) if i != self.game.state.current_player], dtype=np.float32)
+        }
+        return obs
 
     def step(self, action_cards):
         """
@@ -53,6 +46,10 @@ class SamLocEnv:
             if i != prev_player
         ]
 
+        # [MỚI] Lưu lại bài vào danh sách đã đánh trước khi play_move
+        if action_cards:
+            self.played_cards.extend(action_cards)
+            
         # 1. Gọi game engine thực hiện nước đi
         valid, msg = self.game.play_move(action_cards)
 
