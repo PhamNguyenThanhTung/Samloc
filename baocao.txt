@@ -1,69 +1,831 @@
+Sam-Loc/
+├── main.py, train.py, evaluate.py, ai_model.py, ai_agent.py (5 files chính)
+├── logic/ (8 files: rules, cards, game_engine, move_validator, rl_env, scoring, save_manager, ai_utils)
+├── player/ (5 files: base, human, bot, bot_v1, bot_v2)
+└── ui/ (5 files: gui, console_ui, display, input_handle, game_menu)
 ================================================================================
-BÁO CÁO CHI TIẾT CẤU TRÚC DỰ ÁN: SÂM LỐC PRO (AI REINFORCEMENT LEARNING)
+BÁO CÁO CHI TIẾT CẤU TRÚC DỰ ÁN: SÂM LỐC AI (DEEP REINFORCEMENT LEARNING)
 ================================================================================
 
-Dự án là một hệ thống game bài Sâm Lốc hoàn chỉnh, kết hợp giữa giao diện đồ họa (Pygame) 
-và công nghệ trí tuệ nhân tạo học tăng cường (Deep Reinforcement Learning).
-
---------------------------------------------------------------------------------
-1. THƯ MỤC GỐC (ROOT) - ĐIỀU KHIỂN CHÍNH & AI CỐT LÕI
---------------------------------------------------------------------------------
-- main.py: Điểm khởi đầu của ứng dụng. Khởi chạy giao diện đồ họa (GUI).
-- ai_model.py: Định nghĩa kiến trúc Mạng nơ-ron (SamLocQNetwork). Sử dụng MLP 
-  (Multi-Layer Perceptron) với 164 đầu vào để chấm điểm (Q-value) cho từng nước đi.
-- ai_agent.py: Tác tử AI (DMCAgent). Chịu trách nhiệm mã hóa trạng thái ván bài, 
-  phân loại Tier cho các nước đi và sử dụng "Bộ não" (ai_model) để chọn nước đi tối ưu.
-- train.py: Chương trình huấn luyện AI. Cho phép AI tự chơi với chính nó (Self-play) 
-  hàng ngàn ván, tính toán phần thưởng (Reward) và cập nhật trọng số cho mô hình.
-- samloc_ai_model.pth (Sinh ra sau khi train): File chứa toàn bộ tri thức của AI.
-
---------------------------------------------------------------------------------
-2. THƯ MỤC LOGIC (Sam-Loc/logic/) - TRÁI TIM CỦA GAME
---------------------------------------------------------------------------------
-- cards.py: Định nghĩa đối tượng Card (Lá bài) và Deck (Bộ bài). Xử lý việc 
-  chia bài, xáo bài và định danh các quân bài (Rank, Suit).
-- rules.py: Bộ luật Sâm Lốc cốt lõi. Nhận diện các tổ hợp (Sám, Sảnh, Tứ quý,...). 
-  Đặc biệt: Đã xử lý luật sảnh A-2-3 là sảnh nhỏ nhất.
-- move_validator.py: Bộ kiểm tra nước đi hợp lệ. Chịu trách nhiệm sinh ra tất cả 
-  các khả năng đánh bài (Cartesian Product) và kiểm tra xem có chặn được bài đối thủ không.
-- game_engine.py: Quản lý vòng đời ván game (Chia bài -> Báo Sâm -> Đánh bài -> Kết thúc).
-- scoring.py: Hệ thống tính điểm thưởng/phạt chi tiết (Thắng sâm, đền sâm, thối 2, cóng).
-- save_manager.py: Quản lý việc lưu trữ tên người chơi và số tiền vào file JSON.
-- ai_utils.py: Công cụ hỗ trợ AI. Chuyển đổi lá bài thành ma trận Numpy 4x13 và 
-  phân loại nước đi theo 5 cấp độ Tier (0-4).
-- rl_env.py: Môi trường Reinforcement Learning (Gym-like). Biến Game Engine thành 
-  một môi trường cho AI tương tác, tính toán "phần thưởng" (Reward Shaping) để AI học.
-
---------------------------------------------------------------------------------
-3. THƯ MỤC NGƯỜI CHƠI (Sam-Loc/player/) - CÁC LOẠI TÁC TỬ
---------------------------------------------------------------------------------
-- base_player.py: Lớp cha định nghĩa các thuộc tính chung của người chơi (Tên, Tiền, Bài).
-- human_player.py: Xử lý tương tác khi người chơi là con người.
-- bot.py (RandomBot, BotV0): Bot cấp độ dễ, đánh ngẫu nhiên hoặc đánh lá nhỏ nhất.
-- bot_v1.py & bot_v2.py: Bot cấp độ trung bình/khó, có chiến thuật giữ bài và xả 2 sớm.
-
---------------------------------------------------------------------------------
-4. THƯ MỤC GIAO DIỆN (Sam-Loc/ui/) - HIỂN THỊ & TƯƠNG TÁC
---------------------------------------------------------------------------------
-- gui.py: Giao diện đồ họa chính sử dụng Pygame. Hiển thị bàn chơi, hiệu ứng bài, 
-  âm thanh (nếu có) và quản lý các nút bấm.
-- console_ui.py: Giao diện dòng lệnh (Terminal) để test logic nhanh.
-- display.py & input_handle.py: Các hàm bổ trợ hiển thị và xử lý nhập liệu từ bàn phím.
-- game_menu.py: Quản lý các menu trong game (Tạm dừng, Lưu, Thoát).
-
---------------------------------------------------------------------------------
-5. DỮ LIỆU & TÀI NGUYÊN (Sam-Loc/data/ & img/)
---------------------------------------------------------------------------------
-- data/save_game.json: Lưu trữ tiến trình của người chơi (Tiền và Tên).
-- img/: Chứa hình ảnh các lá bài (PNG) và hình nền bàn chơi.
+Dự án là một hệ thống game bài Sâm Lốc hoàn chỉnh, kết hợp giữa giao diện đồ họa 
+(Pygame) và công nghệ trí tuệ nhân tạo học tăng cường (Deep Reinforcement Learning).
 
 ================================================================================
-CƠ CHẾ HOẠT ĐỘNG CỦA AI TRONG DỰ ÁN
+PROMPT HOÀN CHỈNH ĐỂ VIẾT LẠI DỰ ÁN
 ================================================================================
-1. Quan sát (Observation): AI nhìn vào Ma trận 4x13 bài mình và số bài đối thủ.
-2. Suy nghĩ (Action Encoding): AI lấy tất cả các nước đi hợp lệ, gắn nhãn Tier.
-3. Chấm điểm (Q-Evaluation): Mạng nơ-ron chấm điểm cho từng nước đi.
-4. Hành động (Step): AI chọn nước đi điểm cao nhất.
-5. Học tập (Monte Carlo): Sau khi hết ván, AI so sánh kết quả cuối cùng với các 
-   quyết định đã đưa ra để rút kinh nghiệm (Backpropagation).
+
+## PHẦN 1: YÊMPÊU CẦU TỔNG QUÁT
+
+Xây dựng một hệ thống game bài Sâm Lốc hoàn chỉnh bằng Python với các thành phần:
+1. Engine game logic xử lý luật chơi chi tiết
+2. Giao diện đồ họa Pygame tương tác
+3. AI Bot sử dụng Deep Q-Learning hybrid kết hợp heuristics thống kê
+4. Hệ thống huấn luyện league training cho AI
+
+Yêu cầu kỹ thuật:
+- Python 3.8+
+- Thư viện: pygame, torch, numpy
+- GPU support (optional)
+- Cross-platform (Windows, macOS, Linux)
+
 ================================================================================
+PHẦN 2: CHI TIẾT LUẬT TRƠI SÂM LỐC
+================================================================================
+
+### 2.1 Cấu Trúc Bài & Bộ Bài
+- Bộ bài: 52 lá (4 chất × 13 rank)
+- Rank: A, 2, 3, 4, 5, 6, 7, 8, 9, 10, J, Q, K
+- Suit: ♠ (Spade), ♥ (Heart), ♦ (Diamond), ♣ (Club)
+- Biểu diễn: Card = (rank, suit), Deck = tập 52 lá
+
+### 2.2 Tổ Hợp Bài & Thứ Tự Từ Yếu Đến Mạnh
+1. **Đơn** (Single): 1 lá bài
+   - So sánh theo rank: 2 < 3 < ... < K < A
+   
+2. **Đôi** (Pair): 2 lá cùng rank
+   - So sánh theo rank
+
+3. **Sám** (Triple): 3 lá cùng rank
+   - So sánh theo rank
+   - Rank cao nhất: K-K-K (Heo)
+
+4. **Tứ quý** (Quad): 4 lá cùng rank
+   - Mạnh hơn sám cùng rank
+
+5. **Sảnh** (Straight): 5 lá liên tiếp
+   - Tính sảnh theo rank cao nhất
+   - Ví dụ: 3-4-5-6-7 (tính theo 7), 10-J-Q-K-A (tính theo A = 14)
+   - Sảnh đặc biệt: A-2-3-4-5 (tính theo 5, là sảnh nhỏ nhất)
+   - So sánh: Sảnh cao hơn => Thắng
+
+### 2.3 Cách Chơi & Giai Đoạn Ván
+
+**Giai Đoạn 1: Chia Bài**
+- Xáo bộ bài
+- Chia tuần tự cho mỗi người 3 lá
+
+**Giai Đoạn 2: Báo Sâm**
+- Người chơi từ trái đến phải kiểm tra tổ hợp bài
+- Nếu người nào có Sâm (3+ lá cùng rank), họ báo lên
+- Người khác có thể chặn Sâm bằng cách đánh đôi/ba lá cao hơn
+
+**Giai Đoạn 3: Đánh Bài (Main Game Loop)**
+- Người chơi đầu tiên (hoặc người có quyền) đánh 1-3 lá bài
+- Người chơi tiếp theo phải:
+  - Đánh cao hơn bài trên bàn (cùng loại tổ hợp)
+  - Hoặc bỏ lượt (pass)
+- Khi tất cả người khác bỏ lượt, bài được xóa khỏi bàn
+- Người chơi vừa đánh có quyền đi tiếp
+
+**Giai Đoạn 4: Kết Thúc & Tính Điểm**
+- Ván kết thúc khi có người hết bài (tay rỗng)
+- Tính điểm: 
+  - Thắng thường: +10 (2 người), +5 (3 người), +2.5 (4 người)
+  - Thắng sâm: Gấp đôi
+  - Thắng ăn trắng (không ai đánh được): Gấp ba
+  - Phạt thối 2: -5 (khi bỏ lượt 2 lần liên tiếp)
+  - Phạt Cóng: -2.5 (khi không tuân thủ)
+  - Phạt thối Tứ quý: -10 (khi tứ quý bị chặn)
+
+### 2.4 Quy Tắc Chặn & Ăn
+- **Chặn Sâm**: Nếu báo sâm, người khác có thể chặn = không có ai thắng sâm
+- **Ăn Trắng**: Thắng mà không ai trong ván có bài để đánh (rất hiếm)
+- **Bỏ Lượt (Pass)**: Người chơi có thể bỏ nước, quay lại người trước
+- **Cóng**: Nếu không tuân luật, bị phạt
+
+================================================================================
+PHẦN 3: CẤU TRÚC FILE VÀ MODULE
+================================================================================
+
+### 3.1 ROOT LEVEL FILES (Sam-Loc/)
+
+**main.py** - ENTRY POINT & GUI
+- Khởi tạo Pygame window
+- Tạo Menu chính (Chọn mode, số người chơi, độ khó)
+- Vòng lặp game chính:
+  - Hiển thị GUI
+  - Xử lý click chuột
+  - Cập nhật UI
+  - Gọi game_engine để xử lý logic
+- Quản lý states: MENU, PLAYING, PAUSED, RESULT
+- Hỗ trợ lưu/tải game
+
+**train.py** - HUẤN LUYỆN AI
+- Tạo 2-4 AI agents
+- Vòng lặp huấn luyện:
+  - num_episodes = 5000+ (cấu hình)
+  - Mỗi episode:
+    - Tạo ván game mới
+    - Agents chơi từng nước
+    - Collect (state, action, reward, next_state)
+    - Cập nhật mô hình bằng backprop
+- League training: Mỗi N episodes, lưu checkpoint
+- Lưu model: samloc_ai_model_v2.pth
+- In log: Episode, avg_reward, win_rate
+
+**evaluate.py** - ĐÁ ĐÃI HIỆU SUẤT
+- Load model AI, compare với các bot khác
+- Chạy N ván giữa các cặp:
+  - AI vs Random
+  - AI vs BotV1
+  - AI vs BotV1
+- Thống kê: Win rate, draw rate, avg_reward
+
+**ai_model.py** - MẠNG Q-NETWORK
+- Lớp SamLocQNetwork kế thừa torch.nn.Module
+- Architecture:
+  - Input layer: 164 features (xem mục 3.5)
+  - Hidden layers: Dense(164, 256) → ReLU → Dropout(0.3)
+                   Dense(256, 128) → ReLU → Dropout(0.3)
+                   Dense(128, 64) → ReLU
+  - Output layer: Dense(64, 1) → Q-value duy nhất
+- Methods:
+  - forward(x): Tính Q-value từ input
+- Optimizer: Adam, Learning rate = 0.001
+- Loss: MSE (Mean Squared Error)
+
+**ai_agent.py** - AI AGENT THỰC HIỆN HÀNH ĐỘNG
+- Lớp DMCAgent:
+  - Thuộc tính:
+    - model: SamLocQNetwork
+    - device: cpu hoặc cuda
+    - epsilon: Exploration rate
+    - epsilon_decay: Giảm epsilon theo time
+  - Methods:
+    - encode_state(game_state): Chuyển trạng thái thành vector 164D
+      * M_hand[52]: Mã hóa bài tay
+      * M_board[52]: Mã hóa bài trên bàn
+      * M_played[52]: Mã hóa bài đã chơi (lịch sử)
+      * V_size[3]: Vector kích thước tay đối thủ
+    - get_valid_actions(): Lấy tất cả nước đi hợp lệ
+    - classify_action_tier(action): Phân loại 5 mức (0-4)
+    - _estimate_opponent_threats(): Ước lượng xác suất đối thủ có Heo/Tứ quý
+    - select_action(state, valid_actions, eval_mode): Chọn action
+      * Eval mode: Argmax Q-value
+      * Train mode: Epsilon-greedy
+    - update_model(batch): Backprop và cập nhật trọng số
+
+Heuristics bổ sung trong select_action:
+- Nếu đối thủ có nguy cơ cao Heo: Phạt Q-value (-10)
+- Nếu đối thủ còn 1 lá: Ưu tiên chặn lá đó
+- Nếu AI có Heo: Bảo tồn (không đánh sớm)
+- Ưu tiên xả bài tốc độ (action tier = 0)
+
+================================================================================
+PHẦN 4: MODULE LOGIC (logic/ thư mục)
+================================================================================
+
+**cards.py** - CARD & DECK
+
+Lớp Card:
+- Attributes: rank (A-K), suit (♠♥♦♣)
+- Methods:
+  - __init__(rank, suit)
+  - __str__(): "A♠", "2♥", ..., "K♣"
+  - __eq__(): So sánh rank
+  - __lt__(): So sánh rank
+  - __hash__(): Dùng cho set
+
+Lớp Deck:
+- Attributes: cards = [52 thẻ]
+- Methods:
+  - __init__(): Khởi tạo 52 lá
+  - shuffle(): Xáo bộ bài
+  - draw(n): Rút n lá từ đỉnh
+  - reset(): Tạo lại 52 lá
+
+Hàm tiện ích:
+- get_rank_order(): Dict rank → int (A=14, 2=2, ..., K=13)
+- get_suit_symbols(): Dict suit → ký tự
+
+---
+
+**rules.py** - NHẬN DIỆN TỔ HỢP BÀI
+
+Lớp HandRanker:
+- Static methods để nhận diện tổ hợp
+
+Hàm chính:
+- identify_combination(cards): Trả về (type, rank) nếu hợp lệ
+  * Ví dụ: [A♠, A♥, A♦] → (3, 14) = Sám
+  * Ví dụ: [3♠, 4♥, 5♦, 6♣, 7♠] → (5, 7) = Sảnh
+
+- is_valid_straight(cards): Check sảnh
+  * Đặc biệt: A-2-3-4-5 là sảnh nhỏ nhất (rank=5)
+  * K-A không phải sảnh (A chỉ ở đầu hoặc cuối)
+
+- compare_combinations(combo1, combo2): Trả về 1/-1/0
+  * Cùng loại: So sánh rank
+  * Khác loại: Theo thứ tự (Đôi < Sám < Tứ quý < Sảnh)
+  * Lưu ý: Sảnh luôn mạnh hơn Sám
+
+- is_beatable_by(hand, table_combo): Check xem hand có đánh được không
+  * Phải cùng loại tổ hợp hoặc là Sảnh
+  * Phải cao hơn combo trên bàn
+
+---
+
+**move_validator.py** - SINH VÀ VALIDATE NƯỚC ĐI
+
+Lớp MoveValidator:
+- Attributes:
+  - player_hand: Bài tay của người chơi
+  - table_combo: Tổ hợp hiện tại trên bàn
+  - played_cards: Tất cả bài đã chơi (lịch sử)
+
+Methods:
+- get_all_combinations_from_hand(hand): Sinh tất cả tổ hợp từ bài tay
+  * Đơn lẻ (52 khả năng)
+  * Đôi (C(13,1) = 13 khả năng)
+  * Sám (13 khả năng)
+  * Sảnh (8 + 1 = 9 khả năng, bao gồm A-2-3-4-5)
+  * Tứ quý (không khuyến khích, ưu tiên thua sám)
+
+- get_valid_actions(hand, table_combo): Lấy nước đi hợp lệ
+  * Nếu table_combo = None: Return tất cả tổ hợp
+  * Ngược lại: Return chỉ tổ hợp cao hơn table_combo
+  * Thêm action "PASS"
+
+- is_valid_move(action, hand, table_combo): Check action có hợp lệ
+
+- rank_actions_by_tier(actions): Phân loại:
+  * Tier 0: Xả bài (pass hoặc xả 1-2 lá linh tinh)
+  * Tier 1: Bảo tồn (giữ Heo, tứ quý)
+  * Tier 2: Cân bằng
+  * Tier 3: Áp lực (đánh mạnh)
+  * Tier 4: Chặn Sâm
+
+---
+
+**game_engine.py** - ĐIỀU KHIỂN VÒNG ĐỜI VĂN
+
+Lớp GameEngine:
+- Attributes:
+  - players: List[Player]
+  - deck: Deck
+  - table_combo: Tổ hợp hiện tại trên bàn
+  - history: Lịch sử nước đi
+  - current_player_idx: Người chơi hiện tại
+  - announce_sam: Người báo Sâm
+  - pass_count: Số người bỏ lượt liên tiếp
+
+Methods:
+- __init__(players):
+  - Khởi tạo 2-4 người chơi
+  - Tạo deck mới, xáo bài
+
+- deal_cards():
+  - Chia 3 lá cho mỗi người
+  - Lưu vào player.hand
+
+- get_announce_sam():
+  - Từ trái đến phải, hỏi người chơi có Sâm
+  - Update announce_sam nếu có
+
+- play_round():
+  - Vòng lặp chính
+  - current_player chọn action
+  - Validate action
+  - Update table_combo
+  - Kiểm tra end condition: Ai hết bài?
+  - Move to next player
+
+- check_winner():
+  - Return (winner_idx, loser_indices)
+
+- calculate_score():
+  - Tính thưởng/phạt cho mỗi người
+  - Return scores dict
+
+- is_game_over():
+  - Kiểm tra có người hết bài hay không
+
+---
+
+**scoring.py** - HỆ THỐNG TÍNH ĐIỂM
+
+Lớp ScoringSystem:
+- Static methods tính tiền thưởng/phạt
+
+Constants:
+- BASE_SCORE = 10 (2 người), 5 (3 người), 2.5 (4 người)
+- SAM_MULTIPLIER = 2x
+- EAT_CLEAN_MULTIPLIER = 3x
+- PENALTY_PASS_2x = -5
+- PENALTY_QUAD_BEAT = -10
+
+Methods:
+- calculate_score(winner, losers, is_sam, is_clean_eat):
+  * Nếu Sâm: score × 2
+  * Nếu ăn trắng: score × 3
+  * Return: scores {player_idx → tiền thay đổi}
+
+- apply_penalties(player_states):
+  * Kiểm tra vi phạm
+  * Return: penalties
+
+================================================================================
+PHẦN 5: AI UTILITIES & REINFORCEMENT LEARNING
+================================================================================
+
+**ai_utils.py** - CÔNG CỤ HỖ TRỢ
+
+Hàm encode_cards(cards):
+- Input: List[Card]
+- Output: numpy array shape (4, 13) biểu diễn bàn bài
+- Cách encode: matrix[suit_idx][rank_idx] = 1 nếu có card
+
+Hàm encode_state(game_state):
+- Input: GameState object
+- Output: np.array shape (164,)
+- Cấu trúc: [M_hand (52) + M_board (52) + M_played (52) + V_size (3) + Action (52) + Tier (5)]
+
+Hàm get_tier_score(action):
+- Input: Action (move)
+- Output: Tier 0-4 (mức độ quyết định)
+
+Hàm find_all_straights(cards):
+- Input: List[Card]
+- Output: List[straight_combinations]
+- Đặc biệt xử lý A-2-3-4-5
+
+---
+
+**rl_env.py** - MÔI TRƯỜNG REINFORCEMENT LEARNING
+
+Lớp SamLocRLEnv (tương tự Gym):
+- Attributes:
+  - game_engine: GameEngine
+  - played_cards: Set để track bài đã chơi
+  - episode_rewards: Tích lũy phần thưởng
+
+Methods:
+- __init__(num_players=2):
+  - Tạo game engine
+  - Reset trạng thái
+
+- reset():
+  - Khởi tạo ván mới
+  - Return: Initial observation
+
+- step(action):
+  - Thực hiện action
+  - Update game state
+  - Tính reward
+  - Return: (observation, reward, done, info)
+
+- get_observation():
+  - Return: (M_hand, M_board, M_played, V_size)
+
+- calculate_reward(action, outcome):
+  * Reward positive: Xả bài (+1), Thắng (+100)
+  * Reward negative: Bỏ lượt (-2), Thua (-100)
+  * Reward neutral: Đánh bình thường (0)
+
+- get_valid_actions():
+  - Return: List valid actions từ move_validator
+
+================================================================================
+PHẦN 6: MODULE NGƯỜI CHƠI (player/)
+================================================================================
+
+**base_player.py** - LỚP CHA
+
+Lớp Player:
+- Attributes:
+  - name: str
+  - money: float
+  - hand: List[Card]
+  - player_idx: int
+  - is_ai: bool
+
+- Methods:
+  - __init__(name, money=1000)
+  - get_action(game_state): Abstract, override bởi subclass
+  - update_money(delta): Thay đổi tiền
+  - set_hand(cards): Set bài tay
+
+---
+
+**human_player.py** - NGƯỜI CHƠI CON NGƯỜI
+
+Lớp HumanPlayer(Player):
+- Methods:
+  - get_action(game_state):
+    * Hiển thị bài tay và bàn
+    * Chờ input từ mouse/keyboard
+    * Return: Action được chọn
+
+---
+
+**bot.py** - BOT CƠ BẢN
+
+Lớp RandomBot(Player):
+- get_action():
+  - Random chọn từ valid_actions
+  - Return: Random action
+
+Lớp BotV0(Player):
+- get_action():
+  - Nếu có nước đi: Chọn bài nhỏ nhất
+  - Ngược lại: Pass
+
+---
+
+**bot_v1.py** - BOT TRUNG BÌNH
+
+Lớp BotV1(Player):
+- Thuộc tính:
+  - strategy: Heuristic đơn giản
+- get_action():
+  - Nếu đối thủ còn 1 lá: Chặn
+  - Nếu có Sâm: Bảo tồn
+  - Nếu bàn trống: Xả bài tốc độ
+  - Ngược lại: Chọn bài cao nhất
+
+---
+
+**bot_v2.py** - BOT AI MẠNH
+
+Lớp BotV2(Player):
+- Thuộc tính:
+  - agent: DMCAgent
+  - model: SamLocQNetwork (load từ file)
+- Methods:
+  - __init__(name, model_path):
+    * Load model từ file
+  - get_action(game_state):
+    * Gọi agent.select_action()
+    * Return: Best action từ Q-value
+
+================================================================================
+PHẦN 7: MODULE GIAO DIỆN (ui/)
+================================================================================
+
+**gui.py** - GIAO DIỆN PYGAME CHÍNH
+
+Lớp GameGUI:
+- Attributes:
+  - screen: pygame display surface
+  - clock: pygame clock
+  - game_state: Trạng thái game
+  - card_images: Dict[Card → Surface]
+  - selected_cards: Set bài được chọn
+
+Methods:
+- __init__(width=1400, height=900):
+  - Khởi tạo Pygame
+  - Load hình bài (PNG)
+  - Set up fonts, colors
+
+- load_card_images():
+  - Đọc PNG từ img/PNG-cards-1.3/
+  - Mapping: "AS.png" → Card('A', '♠')
+
+- handle_events():
+  - Kiểm tra QUIT
+  - Mouse click on cards/buttons
+  - Keyboard input
+
+- draw():
+  - Vẽ background (bàn chơi)
+  - Vẽ bài của mỗi người chơi
+  - Vẽ bàn chơi (table_combo)
+  - Vẽ nút (OK, Pass, Quit)
+  - Vẽ thông tin (tên, tiền, turn)
+
+- render_text(text, pos, color, size):
+  - Dùng font để vẽ text
+
+- update():
+  - Gọi game_engine.play_round()
+  - Update display
+
+- get_card_position(player_idx, card_rank_in_hand):
+  - Return: (x, y) vị trí vẽ card trên screen
+
+---
+
+**console_ui.py** - GIAO DIỆN TERMINAL
+
+Hàm test_game():
+- Chạy game ở terminal
+- Display text bài tay, bàn
+- Input: Nhập index card hoặc "pass"
+
+Hàm display_hand(cards):
+- In ra bài tay dưới dạng text
+
+Hàm display_table(combo):
+- In ra bài trên bàn
+
+---
+
+**display.py** - HÀM HIỂN THỊ PHỤ
+
+Hàm format_card_name(card):
+- Return: "A♠", "2♥", ...
+
+Hàm format_cards_list(cards):
+- Return: "A♠ 2♥ 3♦"
+
+Hàm display_game_info(players, current_idx):
+- In thông tin người chơi, tiền, turn
+
+---
+
+**input_handle.py** - XỬ LÝ INPUT
+
+Hàm get_card_selection_from_click(mouse_pos, card_positions):
+- Input: Vị trí click
+- Output: Card index được click
+
+Hàm get_keyboard_input():
+- Chờ input keyboard
+- Return: Phím bấm
+
+---
+
+**game_menu.py** - MENU GAME
+
+Lớp MenuManager:
+- States: MAIN_MENU, GAME_RUNNING, PAUSED, GAME_OVER
+
+Methods:
+- show_main_menu():
+  - Hiển thị nút: New Game, Load, Settings, Quit
+
+- show_new_game_menu():
+  - Chọn số người chơi (2-4)
+  - Chọn độ khó bot (Random, BotV1, BotV2)
+
+- show_pause_menu():
+  - Nút: Resume, Save, Quit
+
+- show_game_over_menu():
+  - Hiển thị kết quả, tiền thắng thua
+  - Nút: Next Round, Quit
+
+================================================================================
+PHẦN 8: KIẾN TRÚC HUẤN LUYỆN AI
+================================================================================
+
+**train.py - Chi Tiết**
+
+Luồng huấn luyện:
+
+```
+1. Khởi tạo:
+   - Tạo 2 agent AI (hoặc từ checkpoint cũ)
+   - Replay buffer (optional)
+   - Optimizer, device (CPU/GPU)
+
+2. Vòng lặp:
+   for episode in range(num_episodes):
+     - Reset game: env.reset()
+     - agent1.hand, agent2.hand = chia bài
+     
+     for step in range(max_steps):
+       - current_player = agent[turn]
+       - observation = env.get_observation()
+       - action = current_player.select_action(observation)
+       - next_observation, reward, done, info = env.step(action)
+       
+       - Lưu experience: (obs, action, reward, next_obs)
+       - Update model (mini-batch hoặc full-episode)
+       
+       if done:
+         break
+     
+     - Tính final score
+     - Backprop: gradient descent từ rewards
+     
+     if (episode + 1) % save_interval == 0:
+       - Lưu checkpoint: league_ckpt_{episode}.pth
+       - Log: episode, avg_reward, win_rate
+
+3. Sau huấn luyện:
+   - Lưu model final: samloc_ai_model_v2.pth
+```
+
+Heuristics trong reward:
+- Thắng ván: +100
+- Thua ván: -100
+- Xả bài (pass): +1 (khuyến khích tốc độ)
+- Bỏ lượt 2 lần: -2
+- Chặn Sâm: +5
+- Hết bài trước: +50
+
+---
+
+**evaluate.py - Chi Tiết**
+
+Luồng đánh giá:
+
+```
+1. Load models cần test
+2. For each matchup:
+   for match in range(num_matches):
+     - Chạy game giữa 2 agent
+     - Ghi lại kết quả (win/loss/draw)
+     
+3. Tính thống kê:
+   - Win rate
+   - Draw rate
+   - Avg score difference
+   - Confidence interval (nếu cần)
+
+4. In report
+```
+
+================================================================================
+PHẦN 9: CẤU TRÚC DỮ LIỆU & FILE
+================================================================================
+
+**data/save_game.json**
+
+Cấu trúc:
+```json
+{
+  "players": [
+    {
+      "name": "Player 1",
+      "money": 1050.0,
+      "wins": 5,
+      "losses": 2,
+      "last_played": "2024-01-15 10:30:00"
+    },
+    {
+      "name": "AI Bot V2",
+      "money": 950.0,
+      "wins": 2,
+      "losses": 5
+    }
+  ],
+  "last_game_state": {
+    "turn": 0,
+    "round": 1,
+    "table_combo": null,
+    "hands": [
+      ["A♠", "2♥", "3♦"],
+      ["K♠", "Q♥"]
+    ]
+  }
+}
+```
+
+**Model Checkpoint Format**
+- File: .pth (PyTorch format)
+- Chứa: model.state_dict(), optimizer.state_dict() (optional)
+- Load: `torch.load(filepath)`
+
+================================================================================
+PHẦN 10: FLOW ĐẦY ĐỦ CỦA GAME
+================================================================================
+
+**Chế Độ Chơi Interactive (main.py)**
+
+1. Khởi động:
+   - Menu → Chọn "New Game"
+   - Chọn số người (2-4)
+   - Chọn mix: HumanPlayer + Bot (Random/V1/V2)
+
+2. Chia Bài:
+   - Shuffle deck
+   - Deal 3 lá cho mỗi người
+   - Hiển thị trên GUI
+
+3. Báo Sâm:
+   - Nếu ai có 3 lá cùng rank: Báo
+   - Người khác có thể chặn
+
+4. Main Game Loop:
+   - Current turn: Chọn bài (hoặc Pass)
+   - Validate nước đi
+   - Update table
+   - Next turn
+   - Hiển thị real-time trên GUI
+
+5. Kết Thúc:
+   - Ai hết bài trước thắng
+   - Tính tiền
+   - Hiển thị Result
+   - Optin: "Next Round" hoặc "Quit"
+
+6. Lưu Trạng Thái:
+   - Lưu tiền, tên vào save_game.json
+   - (Optional) Lưu replay
+
+**Chế Độ Huấn Luyện (train.py)**
+
+1. Khởi tạo 2 AI agents
+2. Vòng lặp 5000+ ván self-play
+3. Collect data: (state, action, reward, next_state)
+4. Update model
+5. Lưu checkpoint mỗi 1000 ván
+6. In log tiến độ
+
+**Chế Độ Đánh Giá (evaluate.py)**
+
+1. Load model được test
+2. Chạy 100+ ván vs các đối thủ khác nhau
+3. Tính thống kê
+4. In kết quả
+
+================================================================================
+PHẦN 11: THÔNG SỐ & CẤU HÌNH
+================================================================================
+
+**training.py cấu hình**:
+- num_episodes: 5000
+- batch_size: 32
+- learning_rate: 0.001
+- gamma: 0.99
+- epsilon_start: 1.0
+- epsilon_end: 0.01
+- epsilon_decay: 0.995
+- save_interval: 1000
+
+**model cấu hình**:
+- input_size: 164
+- hidden_sizes: [256, 128, 64]
+- dropout: 0.3
+- activation: ReLU
+
+**game cấu hình**:
+- num_players: 2-4
+- starting_money: 1000
+- max_steps_per_game: 100 (để tránh infinite loop)
+
+================================================================================
+PHẦN 12: TESTING & DEBUGGING
+================================================================================
+
+Unit tests cần thiết:
+1. Test cards.py: Tạo, so sánh card
+2. Test rules.py: Nhận diện tổ hợp, so sánh
+3. Test move_validator.py: Sinh nước đi hợp lệ
+4. Test scoring.py: Tính điểm
+5. Test game_engine.py: Chạy 10 ván, kiểm tra logic
+
+Integration tests:
+1. Test full game: 2 RandomBot vs nhau → 10 ván
+2. Test AI: BotV2 vs BotV0 → kiểm tra win rate > 70%
+3. Test GUI: Click cards, buttons → không crash
+
+================================================================================
+PHẦN 13: ADDITIONAL NOTES
+================================================================================
+
+### Lưu ý quan trọng:
+
+1. **Xử lý Sảnh A-2-3-4-5**:
+   - Đây là sảnh nhỏ nhất (rank=5)
+   - Không phải sảnh loại K-A
+
+2. **Heo (K-K-K)**:
+   - Tổ hợp Sám mạnh nhất
+   - AI phải có chiến lược bảo tồn
+
+3. **Tứ quý**:
+   - Mạnh hơn Sám nhưng ít khi dùng
+   - Thường lưu để phòng thủ
+
+4. **Reward Shaping**:
+   - Rất quan trọng để AI học
+   - Phải cân bằng giữa xả bài và bảo toàn
+
+5. **League Training**:
+   - Giúp AI tránh overfitting
+   - Checkpoint cũ được nạp ngẫu nhiên làm đối thủ
+
+6. **GPU Support**:
+   - `device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')`
+   - Hỗ trợ CUDA + Metal (Apple Silicon)
+
+7. **Pygame Performance**:
+   - Load image một lần (không load mỗi frame)
+   - Dùng sprite groups nếu nhiều objects
+
+================================================================================
+KẾT LUẬN: PROMPT HOÀN CHỈNH ĐÃ SẴN SÀNG
+================================================================================
+
+Bằng cách sử dụng tài liệu này như một PROMPT cho AI, bạn có thể:
+
+1. Copy toàn bộ file này
+2. Paste vào ChatGPT/Claude
+3. Yêu cầu: "Viết code Python cho dự án này dựa trên prompt trên"
+4. AI sẽ tạo ra tất cả các file Python cần thiết
+
+Prompt này đã bao gồm:
+✅ Toàn bộ luật trò chơi
+✅ Kiến trúc từng module chi tiết
+✅ Cấu trúc lớp và phương thức
+✅ Thuật toán AI và reward shaping
+✅ Cách vẽ giao diện
+✅ Luồng huấn luyện
+✅ Các thông số cấu hình
+✅ Ví dụ cấu trúc dữ liệu
+
+AI sẽ có đủ thông tin để viết lại toàn bộ game từ đầu!

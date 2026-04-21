@@ -55,14 +55,16 @@ def get_combination_type(cards):
 
     # Kiểm tra sảnh n >= 3
     if n >= 3:
-        # Trường hợp đặc biệt: Sảnh A-2-3... (A=14, 2=15, 3=3, 4=4...)
-        # Để kiểm tra, nếu có cả 15 và 3, ta thử chuẩn hóa 14->1, 15->2
         check_ranks = ranks
-        if 15 in ranks and 3 in ranks:
-            # Luật Sâm: 2 chỉ được nằm trong sảnh nếu có Át và 3 đi kèm (A-2-3)
-            if 14 not in ranks:
+        
+        # Nếu có 2 (rank 15)
+        if 15 in ranks:
+            # Không được có 2 mà không có 3
+            if 3 not in ranks:
                 return None
             
+            # Có 2 và 3: chuẩn hóa để kiểm tra
+            # Chuẩn hóa: A(14)->1, 2(15)->2, 3+ giữ nguyên
             norm_ranks = []
             for r in ranks:
                 if r == 14: norm_ranks.append(1)
@@ -70,10 +72,8 @@ def get_combination_type(cards):
                 else: norm_ranks.append(r)
             check_ranks = sorted(norm_ranks)
 
+        # Kiểm tra các rank liên tiếp
         if len(set(check_ranks)) == n and all(check_ranks[i] == check_ranks[i-1] + 1 for i in range(1, n)):
-            # Nếu sảnh bình thường (không có 3) mà lại chứa 2 (15) thì không hợp lệ
-            if 15 in ranks and 3 not in ranks:
-                return None
             return "STRAIGHT"
             
     return None
@@ -85,8 +85,8 @@ def get_combination_value(cards):
         return 0
     
     if typ == "STRAIGHT":
-        ranks = [c.rank for c in cards]
-        # Nếu là sảnh A-2-3, giá trị cao nhất là quân bài cuối sau khi chuẩn hóa (ví dụ A-2-3 là 3)
+        ranks = sorted([c.rank for c in cards])
+        # Nếu có 2 (rank 15) và 3, chuẩn hóa để tính giá trị
         if 15 in ranks and 3 in ranks:
             norm_ranks = []
             for r in ranks:
